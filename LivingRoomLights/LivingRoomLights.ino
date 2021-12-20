@@ -6,45 +6,51 @@ int blue_tertiary = 0;
 int green_primary = 0;
 int green_secondary = 255;
 int green_tertiary = 18;
-int len_LED_strip = 200;
+int len_LED_strip = 50;
 int len_LED_segments = 20;
 int pin_LED_data = 3;
 int red_primary = 255;
 int red_secondary = 0;
 int red_tertiary = 190;
-int state = 0;
+int g_state;
+int pix = 25;
 
 Adafruit_NeoPixel pixels(len_LED_strip, pin_LED_data, NEO_GRB + NEO_KHZ800);
 
 void setup() {
+  Serial.begin(9600);
   pixels.begin();
   pixels.clear();
-  Serial.begin(9600);  
 }
 
 void loop() {
-//   outsideOnly(50);
+//  switch (g_state){
+//      Serial.println("Loop Start");
+//    case 0:
+//      pixels.setPixelColor(pix, pixels.Color(0, 0, 0));
+//      pixels.show();
+//      Serial.println("State 0");
+//      g_state = 1;
+//    case 1:
+//      pixels.setPixelColor(pix, pixels.Color(red_primary, green_primary, blue_primary));
+//      pixels.show();
+//      Serial.println("State 1");
+//      g_state = 2;
+//    case 2:
+//      pixels.setPixelColor(pix, pixels.Color(red_secondary, green_secondary, blue_secondary));
+//      pixels.show();
+//      Serial.println("State 2");
+//      g_state = 3;
+//    case 3:
+//      pixels.setPixelColor(pix, pixels.Color(red_tertiary, green_tertiary, blue_tertiary));
+//      pixels.show();
+//      Serial.println("State 3");
+//      g_state = 0;
+//  Serial.println("Loop End");
+//  delay(1000);
+//  }
+   setWholeStrip(0, 0, 0);
    pixels.show();
-  
-//  if (Serial.available() > 0) {
-//    state = Serial.parseInt();
-//    Serial.println(state);
-//  }
-//  if (state==0){
-//    setWholeStrip(0, 0, 0);
-//    pixels.show();
-//  }
-//  else if (state==1){
-//    animateScrollingBars(20, 50);
-//  }
-//  else if (state==2){
-//    setWholeStrip(red_tertiary, green_tertiary, blue_tertiary);
-//    pixels.show();
-//  }
-//  else if (state==3){
-//    setWholeStrip(200, 200, 200);
-//    pixels.show();
-//  }
 }
 
 void setWholeStrip(int r, int g, int b){
