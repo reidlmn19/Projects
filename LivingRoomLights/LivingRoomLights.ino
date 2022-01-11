@@ -6,7 +6,7 @@ int blue_tertiary = 0;
 int green_primary = 0;
 int green_secondary = 255;
 int green_tertiary = 18;
-int len_LED_strip = 50;
+int len_LED_strip = 200;
 int len_LED_segments = 20;
 int pin_LED_data = 3;
 int red_primary = 255;
@@ -49,8 +49,9 @@ void loop() {
 //  Serial.println("Loop End");
 //  delay(1000);
 //  }
-   setWholeStrip(0, 0, 0);
+   setWholeStrip(red_tertiary, green_tertiary, blue_tertiary);
    pixels.show();
+   delay(1000);
 }
 
 void setWholeStrip(int r, int g, int b){
