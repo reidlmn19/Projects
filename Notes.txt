@@ -1,0 +1,2 @@
+For installing numpy on raspberry pi, run 
+    sudo apt-get install python-dev libatlas-base-dev
