@@ -1,5 +1,9 @@
 import os
 import pandas as pd
+import RPi.GPIO as GPIO
+import time
+import spidev
+
 
 main_directory = os.path.dirname(os.path.realpath(__file__))
 color_str = 'Macaroni and Cheese'
