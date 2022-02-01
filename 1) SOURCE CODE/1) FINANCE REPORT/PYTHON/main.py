@@ -74,7 +74,7 @@ class Institution:
 # List of source files
 
 dir_input = r'D:/'
-dir_output = r'1) SURCE CODE/1) FINANCE REPORT/OUTPUT_FILES'
+dir_output = r'C:\Users\relleman\Documents\PersonalGit\reidlmn19\1) SOURCE CODE\1) FINANCE REPORT\OUTPUT_FILES\\'
 
 list_Institutions = ['Santander', 'Peoples', 'Quicksilver', 'Platinum', 'ClearMotion',
                      'iRobot', 'Betterment', 'Nelnet']
