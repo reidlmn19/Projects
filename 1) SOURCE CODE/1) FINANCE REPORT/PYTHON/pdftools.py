@@ -307,12 +307,11 @@ def Peoples(list):
             print(df_data.head(10))
             print(df_data.columns)
 
-
             print(df_data.index.min())
-            period_begin = datetime.datetime.strptime(df_data.index.min(),'%m/%d/%Y')
+            period_begin = datetime.datetime.strptime(df_data.index.min(), '%m/%d/%Y')
             list_periodbegin.append(period_begin)
 
-            period_end = datetime.datetime.strptime(df_data.index.max(),'%m/%d/%Y')
+            period_end = datetime.datetime.strptime(df_data.index.max(), '%m/%d/%Y')
             list_periodend.append(period_end)
 
     df_data = pd.concat(list_data)
@@ -371,7 +370,8 @@ def ClearMotion(list):
 
     dic_data = {"Pay Date": list_paydate, "Period Begin": list_periodbegin, "Period End": list_periodend,
                 "Gross Pay": list_grosspay, "Net Pay": list_netpay}
-    dic_files = {"Pay Date": list_paydate, "Period Begin": list_periodbegin, "Period End": list_periodend, "File Name": list_files,
+    dic_files = {"Pay Date": list_paydate, "Period Begin": list_periodbegin, "Period End": list_periodend,
+                 "File Name": list_files,
                  'Institution': 'ClearMotion', 'Type': 'Employer'}
 
     df_source = pd.DataFrame(dic_files)
@@ -428,7 +428,8 @@ def iRobot(list):
 
     dic_data = {"Pay Date": list_paydate, "Period Begin": list_periodbegin, "Period End": list_periodend,
                 "Gross Pay": list_grosspay, "Net Pay": list_netpay}
-    dic_files = {"Pay Date": list_paydate, "Period Begin": list_periodbegin, "Period End": list_periodend, "File Name": list_files,
+    dic_files = {"Pay Date": list_paydate, "Period Begin": list_periodbegin, "Period End": list_periodend,
+                 "File Name": list_files,
                  'Institution': 'ClearMotion', 'Type': 'Employer'}
 
     df_source = pd.DataFrame(dic_files)

@@ -1,0 +1,4 @@
+Goals:
+    Budgeting
+    Project account balances
+    Presentation
