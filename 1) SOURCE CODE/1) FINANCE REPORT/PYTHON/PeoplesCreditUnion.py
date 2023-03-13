@@ -1,14 +1,17 @@
-from FinanceReport import BankingAccount
-from FinanceReport import categorize
 import pandas as pd
 import datetime
 
-class PeoplesCreditUnion(BankingAccount):
+class PeoplesCreditUnionStatement:
 
-    def __init__(self, name):
-        print(f'Peoples Credit Union')
+    def __init__(self, path):
+        self.path = path
+        self.institution = 'PeoplesCredit'
+        self.type = 'Statement'
 
-    def read_transaction_history(list):
+    def read_data(self):
+        return self.institution
+
+    def read_transaction_history(self):
         list_files = []
         list_periodbegin = []
         list_periodend = []
@@ -37,15 +40,15 @@ class PeoplesCreditUnion(BankingAccount):
 
         df_data = pd.concat(list_data)
 
-        for i in df_data['Transaction Description'].values:
-            list_category.append(categorize(i))
+        # for i in df_data['Transaction Description'].values:
+        #     list_category.append(categorize(i))
+        #
+        # df_data.set_index(pd.to_datetime(df_data.index))
+        # df_data.rename(columns={'Withdrawals': 'Amount'})
+        #
+        # df_data['Category'] = list_category
+        # dic_files = {"Period Begin": list_periodbegin, "Period End": list_periodend, "File Name": list_files,
+        #              'Institution': 'Peoples', 'Type': 'Bank'}
+        # df_source = pd.DataFrame(dic_files)
 
-        df_data.set_index(pd.to_datetime(df_data.index))
-        df_data.rename(columns={'Withdrawals': 'Amount'})
-
-        df_data['Category'] = list_category
-        dic_files = {"Period Begin": list_periodbegin, "Period End": list_periodend, "File Name": list_files,
-                     'Institution': 'Peoples', 'Type': 'Bank'}
-        df_source = pd.DataFrame(dic_files)
-
-        return df_source, df_data
+        return df_data
