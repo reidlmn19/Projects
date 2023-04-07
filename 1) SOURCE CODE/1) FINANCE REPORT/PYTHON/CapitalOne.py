@@ -1,14 +1,64 @@
-from tika import parser
-import datetime
+from datetime import *
 import pandas as pd
 import PyPDF2
+import numpy as np
 
 
-def getEntry(key, list):
-    for i in list:
-        if key in i:
-            return i
-    return
+def str_to_date(s, year=None):
+    formats = [
+        '%b. %d, %Y',
+        '%b %d, %Y',
+        '%b %d',
+        '%d-%b'
+    ]
+    for f in formats:
+        try:
+            d = datetime.strptime(s, f)
+            if year:
+                d = d.replace(year=year)
+            return [d]
+        except:
+            pass
+    if len(s) >= 10:
+        try:
+            split = s.split(' - ')
+            d1 = split[0].strip()
+            d2 = split[1].strip()
+            if '.' in d1:
+                d = [datetime.strptime(d1, '%b. %d, %Y'), datetime.strptime(d2, '%b. %d, %Y')]
+            else:
+                d = [datetime.strptime(d1, '%b %d, %Y'), datetime.strptime(d2, '%b %d, %Y')]
+            return d
+        except:
+            pass
+    return None
+
+
+def str_to_number(s):
+    pos = False
+    neg = False
+    if '$' in s:
+        s = s.replace('$', '')
+    if ',' in s:
+        s = s.replace(',', '')
+    if '=' in s:
+        s = s.replace('=', '')
+    if '+' in s:
+        s = s.replace('+', '')
+        pos = True
+    elif '-' in s:
+        s = s.replace('-', '')
+        neg = True
+    s.strip()
+    try:
+        num = float(s)
+        if pos:
+            num = abs(num)
+        elif neg:
+            num = abs(num) * -1
+        return num
+    except:
+        pass
 
 
 class CapitalOneStatement:
@@ -21,361 +71,316 @@ class CapitalOneStatement:
         else:
             self.account = account
 
-        self.info = pd.DataFrame()
-        self.summary = pd.DataFrame()
+        self.summary = {}
         self.transactions = pd.DataFrame()
 
-    def get_summary(self, raw_list):
-        dic = {}
+    def get_summary(self, lst, debug=False):
+        if debug:
+            print(lst)
+
+        keywords = {
+            'Previous Balance': 1,
+            'Other Credits': 1,
+            'Transactions': 1,
+            'Cash Advances': 1,
+            'Fees Charged': 1,
+            'Interest Charged': 1,
+            'New Balance': 1,
+            'Credit Limit': 2,
+            'Cash Advance Credit Limit': 1,
+            'Available Credit for Cash Advances': 1,
+            'Payment Due Date': 4,
+            'Minimum Payment Due': 1,
+            '  |  ': 5,
+            'Visa Signature Account Ending in': 6,
+            'Previous': 7,
+            'Adjusted': 7,
+            'Earned': 7,
+            'Transferred In': 7,
+            'Redeemed': 7,
+            'Transferred Out': 7,
+            'Rewards': 7,
+            '-': 8
+        }
+
+        df = pd.DataFrame(columns=['Item', 'Flag'])
         state = 0
-        for item in raw_list:
-            if item == "Account Summary":
-                state = 1
-                continue
-            elif item in dic.keys():
-                state = 1
-                continue
-            elif item == "Previous Balance":
-                if state == 1:
-                    state = 2
-                continue
+        last_keyword = ''
+        last_item = ''
+        summary = {}
+        for item in lst:
+            item = item.strip()
+            s2d = str_to_date(item)
+            s2n = str_to_number(item)
+
+            if state == 0:
+                pass
+            elif state == 1:
+                if s2n is not None:
+                    summary[last_keyword] = s2n
+                state = 0
             elif state == 2:
-                if '$' in item.lower():
-                    remove_chars = item.replace('$', '')
-                    remove_chars = remove_chars.replace(' ', '')
-                    remove_chars = remove_chars.replace(',', '')
-                    try:
-                        amount = float(remove_chars)
-                        dic["Previous Balance"] = amount
-                        state = 1
-                    except:
-                        state = 1
-                continue
-            elif item == "Other Credits":
-                if state == 1:
-                    state = 3
-                continue
+                if s2n is not None:
+                    summary[last_keyword] = s2n
+                state = 3
             elif state == 3:
-                if '$' in item.lower():
-                    remove_chars = item.replace('$', '')
-                    remove_chars = remove_chars.replace(' ', '')
-                    remove_chars = remove_chars.replace(',', '')
-                    try:
-                        amount = float(remove_chars)
-                        dic["Other Credits"] = amount
-                        state = 1
-                    except:
-                        state = 1
-                continue
-            elif item == "Transactions":
-                if state == 1:
-                    state = 4
-                continue
+                if s2n is not None:
+                    summary['Available Credit'] = s2n
+                state = 0
             elif state == 4:
-                if '$' in item.lower():
-                    remove_chars = item.replace('$', '')
-                    remove_chars = remove_chars.replace(' ', '')
-                    remove_chars = remove_chars.replace(',', '')
-                    try:
-                        amount = float(remove_chars)
-                        dic["Transactions"] = amount
-                        state = 1
-                    except:
-                        state = 1
-                continue
-            elif item == "Cash Advances":
-                if state == 1:
-                    state = 5
-                continue
+                if s2d is not None:
+                    summary[last_keyword] = s2d[0]
+                state = 0
             elif state == 5:
-                if '$' in item.lower():
-                    remove_chars = item.replace('$', '')
-                    remove_chars = remove_chars.replace(' ', '')
-                    remove_chars = remove_chars.replace(',', '')
-                    try:
-                        amount = float(remove_chars)
-                        dic["Cash Advances"] = amount
-                        state = 1
-                    except:
-                        state = 1
-                continue
-            elif item == "Fees Charged":
-                if state == 1:
-                    state = 6
-                continue
+                if s2n is not None:
+                    summary['Days in Billing Cycle'] = s2n
+                state = 0
             elif state == 6:
-                if '$' in item.lower():
-                    remove_chars = item.replace('$', '')
-                    remove_chars = remove_chars.replace(' ', '')
-                    remove_chars = remove_chars.replace(',', '')
-                    try:
-                        amount = float(remove_chars)
-                        dic["Fees Charged"] = amount
-                        state = 1
-                    except:
-                        state = 1
-                continue
-            elif item == "Interest Charged":
-                if state == 1:
-                    state = 7
-                continue
+                if s2n is not None:
+                    summary['Payments'] = s2n
+                state = 0
             elif state == 7:
-                if '$' in item.lower():
-                    remove_chars = item.replace('$', '')
-                    remove_chars = remove_chars.replace(' ', '')
-                    remove_chars = remove_chars.replace(',', '')
-                    try:
-                        amount = float(remove_chars)
-                        dic["Interest Charged"] = amount
-                        state = 1
-                    except:
-                        state = 1
-                continue
-            elif item == "New Balance":
-                if state == 1:
-                    state = 8
-                continue
+                if s2n is not None:
+                    summary[f"{last_keyword} Earnings"] = s2n
+                state = 0
             elif state == 8:
-                if '$' in item.lower():
-                    remove_chars = item.replace('$', '')
-                    remove_chars = remove_chars.replace(' ', '')
-                    remove_chars = remove_chars.replace(',', '')
-                    try:
-                        amount = float(remove_chars)
-                        dic["New Balance"] = amount
-                        state = 1
-                    except:
-                        state = 1
-                continue
-            elif item == "Credit Limit":
-                if state == 1:
-                    state = 9
-                continue
-            elif state == 9:
-                if '$' in item.lower():
-                    remove_chars = item.replace('$', '')
-                    remove_chars = remove_chars.replace(' ', '')
-                    remove_chars = remove_chars.replace(',', '')
-                    try:
-                        amount = float(remove_chars)
-                        dic["Credit Limit"] = amount
-                        state = 10
-                    except:
-                        state = 1
-                continue
-            elif state == 10:
-                if '$' in item.lower():
-                    remove_chars = item.replace('$', '')
-                    remove_chars = remove_chars.replace(' ', '')
-                    remove_chars = remove_chars.replace(',', '')
-                    try:
-                        amount = float(remove_chars)
-                        dic["Available Credit"] = amount
-                        state = 1
-                    except:
-                        state = 1
-                continue
-            elif item in ['7490', '5009', '4586']:
-                if state == 1:
-                    state = 11
-                continue
-            elif state == 11:
-                try:
-                    remove_chars = item.replace('.', '')
-                    remove_chars = remove_chars.replace(',', '')
-                    date = datetime.datetime.strptime(remove_chars, '%b %d %Y')
-                    dic["Start Date"] = date
-                    state = 12
-                except:
-                    state = 1
-                continue
-            elif state == 12:
-                if item == ' - ':
-                    continue
-                try:
-                    remove_chars = item.replace('.', '')
-                    remove_chars = remove_chars.replace(',', '')
-                    date = datetime.datetime.strptime(remove_chars, '%b %d %Y')
-                    dic["End Date"] = date
-                    state = 1
-                except:
-                    state = 1
-                continue
-        self.summary = dic
-        if dic["Start Date"].year == dic["End Date"].year:
-            self.year = dic["Start Date"].year
+                if s2d is not None:
+                    summary["Period Ending"] = s2d[0]
+                    summary["Period Starting"] = p_start
+                state = 0
 
-    def get_transactions(self, raw_list):
-        lst_desc = []
-        lst_date = []
-        lst_amount = []
+            if item in keywords.keys():
+                df = pd.concat([df, pd.DataFrame({'Item': item, 'Flag': keywords[item]}, index=[0])], ignore_index=True)
+                state = keywords[item]
+                last_keyword = item
+                n = 0
+                while last_keyword in summary.keys():
+                    n += 1
+                    last_keyword = item + str(n)
+            elif s2d is not None:
+                df = pd.concat([df, pd.DataFrame({'Item': item, 'Flag': s2d}, index=range(len(s2d)))],
+                               ignore_index=True)
+            elif s2n is not None:
+                df = pd.concat([df, pd.DataFrame({'Item': item, 'Flag': s2n}, index=[0])], ignore_index=True)
+            else:
+                df = pd.concat([df, pd.DataFrame({'Item': item, 'Flag': None}, index=[0])], ignore_index=True)
+
+            if state == 8:
+                if str_to_date(last_item) is not None:
+                    p_start = str_to_date(last_item)[0]
+                else:
+                    state = 0
+            last_item = item
+
+        if debug:
+            df.to_csv('D:\Artifacts\Test.csv')
+        summary['Account'] = self.account
+        self.summary = summary
+
+    def get_summary2(self, lst, debug=False):
+        keywords = {
+            'Previous Balance': 1,
+            'Payments': 1,
+            'Other Credits': 1,
+            'Transactions': 1,
+            'Cash Advances': 1,
+            'Fees Charged': 1,
+            'Interest Charged': 1,
+            'New Balance': 1,
+            'Credit Limit': 1,
+            'Available Credit': 2,
+            'Cash Advance Credit Limit': 1,
+            'Available Credit for Cash Advances': 3,
+            'Payment Due Date': 4,
+            'days in Billing Cycle': 5
+        }
+        summary = {}
+        last_key = ''
         state = 0
-        y1 = self.summary["Start Date"].year
-        y2 = self.summary["End Date"].year
-        for item in raw_list:
-            if item.lower() == 'date':
-                state = 1
-                continue
-            elif item.lower() == 'description':
-                if state == 1:
+        for item in lst:
+            for key in keywords.keys():
+                if key in item:
+                    state = keywords[key]
+                    last_key = key
+
+            if state == 0:
+                pass
+            elif state == 1:
+                s2n = str_to_number(item.replace(last_key, ''))
+                if s2n is not None:
+                    summary[last_key] = s2n
+                state = 0
+            elif state == 2:
+                s = item.replace(last_key, '').split(')')[1]
+                s2n = str_to_number(s)
+                if s2n is not None:
+                    summary[last_key] = s2n
+                state = 0
+            elif state == 3:
+                s = item.replace(last_key, '')
+                s = s.replace('Payment Information', '')
+                s2n = str_to_number(s)
+                if s2n is not None:
+                    summary[last_key] = s2n
+                state = 0
+            elif state == 4:
+                # print(f'WTF do I do about {last_key} and {item}')
+                state = 0
+            elif state == 5:
+                s = item.split(' | ')[0]
+                s2d = str_to_date(s)
+                if s2d is not None:
+                    summary['Period Starting'] = s2d[0]
+                    summary['Period Ending'] = s2d[1]
+                state = 0
+
+        summary['Account'] = self.account
+        self.summary = summary
+
+    def get_transactions(self, lst, debug=False):
+        transactions = pd.DataFrame()
+        state = 0
+        next_entry = {}
+        desc_buffer = ''
+        for item in lst:
+            s2d = str_to_date(item)
+            s2n = str_to_number(item)
+
+            if state == 0:
+                pass
+            elif state == 1:
+                if item == 'Description':
                     state = 2
                 else:
                     state = 0
-                continue
-            elif item.lower() == 'amount':
-                if state == 2:
+            elif state == 2:
+                if item == 'Amount':
                     state = 3
                 else:
                     state = 0
-                continue
             elif state == 3:
-                try:
-                    cells = item.split()
-                    d = int(cells[1])
-                    m = datetime.datetime.strptime(cells[0], '%b')
-                    if m.month == 1:
-                        y = y2
+                if s2d is not None:
+                    d = s2d[0]
+
+                    if d.month == 1:
+                        d = d.replace(year=self.summary['Period Ending'].year)
                     else:
-                        y = y1
-                    date = datetime.date(y, m.month, d)
+                        d = d.replace(year=self.summary['Period Starting'].year)
+
+                    next_entry['Date'] = d
                     state = 4
-                except:
-                    state = 0
-                continue
-            elif state == 4:
-                desc = item
-                state = 5
-                continue
-            elif state == 5:
-                if '$' in item.lower():
-                    remove_chars = item.replace('$', '')
-                    remove_chars = remove_chars.replace(' ', '')
-                    remove_chars = remove_chars.replace(',', '')
-                    try:
-                        amount = float(remove_chars)
-                        lst_date.append(date)
-                        lst_desc.append(desc)
-                        lst_amount.append(amount)
-                        state = 3
-                    except:
-                        desc = desc + item
                 else:
-                    desc = desc + item
-        df = pd.DataFrame({"Date": lst_date,
-                           "Description": lst_desc,
-                           "Amount": lst_amount,
-                           "Account": [self.account] * len(lst_date),
-                           "Institution": [self.institution] * len(lst_date)})
-        self.transactions = df
+                    state = 3
+            elif state == 4:
+                if s2n is not None:
+                    if '$' in item:
+                        next_entry['Amount'] = s2n
+                        next_entry['Description'] = desc_buffer
+                        transactions = pd.concat([transactions, pd.DataFrame(next_entry, index=[0])], ignore_index=True)
+                        desc_buffer = ''
+                        next_entry = {}
+                        state = 3
+                    else:
+                        desc_buffer = desc_buffer + item
+                        state = 4
+                else:
+                    desc_buffer = desc_buffer + item
+                    state = 4
 
-    def get_PDFinfo(self):
-        reader = PyPDF2.PdfReader(self.path)
-        m_data = reader.metadata
-        self.info = m_data
-        return
+            if item == "Date":
+                state = 1
+        if 'Period Ending' in self.summary.keys():
+            transactions = pd.concat([transactions,
+                                      pd.DataFrame({'Date': self.summary['Period Ending'],
+                                                    'Description': 'Interest Charged',
+                                                    'Amount': self.summary['Interest Charged']
+                                                    }, index=[0])], ignore_index=True)
+        transactions['Account'] = self.account
+        transactions.Amount = transactions.Amount * -1
+        self.transactions = transactions
+        if debug:
+            transactions.to_csv('D:\Artifacts\Test2.csv')
 
-    def read_data(self):
+    def get_transactions2(self, lst, debug=False):
+        transactions = pd.DataFrame()
+        state = 0
+        next_entry = {}
+        for item in lst:
+            if state == 0:
+                pass
+            elif state == 1:
+                item = item.strip()
+                cells = item.split(' ')
+                if str_to_date(' '.join(cells[0:2])) is None:
+                    continue
+                t_date = ' '.join(cells[0:2])
+                p_date = ' '.join(cells[2:4])
+                if cells[-2] in ['+', '-']:
+                    desc = ' '.join(cells[4:-2])
+                    amt = ' '.join(cells[-2:])
+                else:
+                    desc = ' '.join(cells[4:-1])
+                    amt = ' '.join(cells[-1:])
+
+                t_date = str_to_date(t_date)[0]
+                p_date = str_to_date(p_date)[0]
+                amt = str_to_number(amt)
+
+                if t_date.month == 1:
+                    t_date = t_date.replace(year=self.summary['Period Ending'].year)
+                else:
+                    t_date = t_date.replace(year=self.summary['Period Starting'].year)
+                if p_date.month == 1:
+                    p_date = p_date.replace(year=self.summary['Period Ending'].year)
+                else:
+                    p_date = p_date.replace(year=self.summary['Period Starting'].year)
+
+                new_entry = {
+                    'Post Date': p_date,
+                    'Transaction Date': t_date,
+                    'Date': p_date,
+                    'Amount': amt,
+                    'Description': desc
+                }
+                if None in new_entry.values():
+                    continue
+                # elif np.isnan(new_entry['Date']):
+                #     continue
+                transactions = pd.concat([transactions,
+                                          pd.DataFrame(new_entry, index=[0])], ignore_index=True)
+
+            if item == "Trans Date Post Date Description Amount ":
+                state = 1
+
+        if 'Period Ending' in self.summary.keys():
+            transactions = pd.concat([transactions,
+                                      pd.DataFrame({'Date': self.summary['Period Ending'],
+                                                    'Description': 'Interest Charged',
+                                                    'Amount': self.summary['Interest Charged']
+                                                    }, index=[0])], ignore_index=True)
+        transactions['Account'] = self.account
+        transactions.Amount = transactions.Amount * -1
+        self.transactions = transactions
+        if debug:
+            transactions.to_csv('D:\Artifacts\Test2.csv')
+
+    def read_data(self, debug=False):
         pages_list = []
         reader = PyPDF2.PdfReader(self.path)
         for page in reader.pages:
             page_text = page.extractText()
             page_list = page_text.split('\n')
             pages_list.extend(page_list)
-        self.get_PDFinfo()
-        self.get_summary(pages_list)
-        self.get_transactions(pages_list)
 
+        try:
+            self.get_summary2(pages_list, debug=debug)
+            self.get_transactions2(pages_list, debug=debug)
+        except:
+            print(f'Failed once: {self.path}')
 
-class PlatinumStatement:
-    def __init__(self, path):
-        self.path = path
-        self.institution = 'CapitalOne'
-        self.type = 'Statement'
-        self.account = 'Quicksilver'
-
-    def read_data(self):
-        months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-        list_files = []
-        list_paydate = []
-        list_periodbegin = []
-        list_periodend = []
-        list_date = []
-        list_description = []
-        list_category = []
-        list_amount = []
-
-        for i in list:
-            if 'Platinum' in i:
-                file = i
-                list_files.append(file)
-                print("Active file: " + file)
-
-                p = parser.from_file(file)
-                raw = p['content'].split('\n')
-                raw[:] = [x for x in raw if x]
-
-                d = getEntry('days in Billing Cycle', raw)
-                d = d.replace(',', '').replace('.', '')
-                dates = d.split('|')[0].split(' - ')
-
-                start_date = datetime.datetime.strptime(dates[0], '%b %d %Y')
-                list_periodbegin.append(start_date)
-
-                end_date = datetime.datetime.strptime(dates[1].strip(' '), '%b %d %Y')
-                yr = end_date.year
-                list_periodend.append(end_date)
-
-                pay_date = end_date
-                list_paydate.append(pay_date)
-
-                j = raw.index('Visit www.capitalone.com to see detailed transactions.') + 6
-                e_desc = ''
-                e_add = ''
-                e_date = ''
-                while j < len(raw):
-                    if 'Total Transactions for This Period' in raw[j]:
-                        break
-                    try:
-                        c = raw[j].split(' ')
-                        for k in c:
-                            if k in months:
-                                e_date = ' '.join(c[:2])
-                            elif '$' in k:
-                                e_add = k
-                            else:
-                                e_desc = e_desc + k + ' '
-                    except:
-                        if raw[j] in months:
-                            e_date = ' '.join(c[:2])
-                        elif '$' in raw[j]:
-                            e_add = k
-                        else:
-                            e_desc = e_desc + k + ' '
-                    if e_date and e_desc and e_add:
-                        e_date = e_date + ' ' + str(yr)
-                        e_date.replace(',', '')
-                        e_date = datetime.datetime.strptime(e_date, '%b %d %Y')
-                        list_date.append(e_date)
-                        e_date = ''
-
-                        list_amount.append(round(float(e_add.replace('$', '').replace(',', '')), 2))
-                        e_add = ''
-
-                        d = e_desc.split(' ')
-                        e_desc = ' '.join(d[1:-1])
-                        e_cat = None
-                        list_description.append(e_desc)
-                        list_category.append(e_cat)
-                        e_desc = ''
-                        e_cat = ''
-                    j = j + 1
-
-        dic_data = {'Date': list_date, 'Amount': list_amount, 'Description': list_description,
-                    'Category': list_category}
-        dic_files = {"Pay Date": list_paydate, "File Name": list_files, "Period Begin": list_periodbegin,
-                     "Period End": list_periodend, 'Institution': 'Platinum', 'Type': 'Credit Card'}
-
-        df_files = pd.DataFrame(dic_files)
-        df_data = pd.DataFrame(dic_data)
-
-        return df_files, df_data
+        if len(self.transactions)<2:
+            try:
+                self.get_summary(pages_list, debug=debug)
+                self.get_transactions(pages_list, debug=debug)
+            except:
+                print(f'Failed twice: {self.path}')

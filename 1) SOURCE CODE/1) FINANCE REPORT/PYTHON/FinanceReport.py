@@ -2,7 +2,7 @@ import pdftools
 import os
 import pandas as pd
 import win32api
-import datetime
+from datetime import *
 
 from Betterment import *
 from Santander import *
@@ -12,7 +12,8 @@ from Nelnet import *
 from iRobot import *
 from Fidelity import *
 
-right_now = datetime.date.today()
+
+# right_now = datetime.date.today()
 
 
 def categorize(s):
@@ -85,14 +86,16 @@ class Report:
             self.path_rawData = r'\\'.join([self.path, 'RawData\\'])
 
             self.path_artifacts = r'\\'.join([self.path, 'Artifacts\\'])
-            self.path_Report = f'{self.path_artifacts}\\{self.title}'
+            self.path_report = f'{self.path_artifacts}\\{self.title}'
 
             self.path_permData = r'\\'.join([self.path, 'PermanentData\\'])
             self.path_dataReg = f'{self.path_permData}\\DataRegistry.csv'
             self.path_tranHistory = f'{self.path_permData}\\TransactionHistory.csv'
+            self.path_accLedger = f'{self.path_permData}\\AccountLedger.csv'
 
         self.df_trans = TransactionHistory(path=self.path_tranHistory, bool_debug=bool_debug)
         self.df_register = DataRegistry(path=self.path_dataReg, bool_debug=bool_debug)
+        self.df_ledger = AccountLedger(path=self.path_accLedger)
 
         if bool_debug:
             print(f"Title: {self.title}")
@@ -102,51 +105,54 @@ class Report:
 
     def extract_data(self, path):
         dat = None
+        dic = None
         if os.path.exists(path):
             if 'betterment' in path.lower():
                 # f = BettermentStatement(path)
-                print(f'Not yet supported {path}')
+                # print(f'Not yet supported {path}')
                 f = None
             elif 'santander' in path.lower():
                 # f = SantanderStatement(path)
-                print(f'Not yet supported {path}')
+                # print(f'Not yet supported {path}')
                 f = None
             elif 'peoples' in path.lower():
                 # f = PeoplesCreditUnionStatement(path)
-                print(f'Not yet supported {path}')
+                # print(f'Not yet supported {path}')
                 f = None
             elif 'quicksilver' in path.lower():
                 f = CapitalOneStatement(path, account='Quicksilver')
                 f.read_data()
                 dat = f.transactions
+                dic = f.summary
             elif 'platinum' in path.lower():
                 f = CapitalOneStatement(path, account='Platinum')
                 f.read_data()
                 dat = f.transactions
+                dic = f.summary
             elif 'nelnet' in path.lower():
                 # f = NelnetStatement(path)
-                print(f'Not yet supported {path}')
+                # print(f'Not yet supported {path}')
                 f = None
             elif 'irobot' in path.lower():
                 # f = iRobotPaycheck(path)
-                print(f'Not yet supported {path}')
+                # print(f'Not yet supported {path}')
                 f = None
             elif 'fidelity' in path.lower():
                 # f = FidelityStatement(path)
-                print(f'Not yet supported {path}')
+                # print(f'Not yet supported {path}')
                 f = None
             elif 'clearmotion' in path.lower():
                 # f = FidelityStatement(path)
-                print(f'Not yet supported {path}')
+                # print(f'Not yet supported {path}')
                 f = None
             else:
-                print(f'File not recognized: {path}')
+                # print(f'File not recognized: {path}')
                 f = None
         else:
             print(f'Path invalid: {path}')
-        return dat
+        return dat, dic
 
-    def register_NewFiles(self, save=False):
+    def register_new_files(self, save=True):
         discovered_files = os.listdir(self.path_rawData)
         registered_files = self.df_register.data['File'].values
         for new_file in discovered_files:
@@ -156,111 +162,47 @@ class Report:
                 newline = pd.DataFrame({'File': [new_file], 'Status': ['New']})
                 self.df_register.add_data(newline)
         if save:
-            self.saveDataRegistry()
+            self.save_DataRegistry()
 
-    def read_NewFiles(self, save=False, debug=False, isolate=None):
+    def process_new_files(self, save=True, debug=False):
+        df_file_summary = pd.DataFrame()
         file_queue = self.df_register.data[self.df_register.data['Status'] == 'New']
         for ind, row in file_queue.iterrows():
-            print(row['File'])
             f = self.path_rawData + row['File']
-            trans = self.extract_data(f)
-            if debug:
-                print(row['File'])
-                print(trans)
-                s = input('look good? y/n')
-                if s == 'y':
-                    self.df_register.data.at[ind, 'Status'] = 'Done'
-                    self.df_trans.add_data(trans)
-                else:
-                    self.df_register.data.at[ind, 'Status'] = 'Fail'
-            else:
+            print(f)
+            dat, dic = self.extract_data(f)
+            try:
+                self.df_trans.add_data(dat)
+                self.df_ledger.add_data(dic)
                 self.df_register.data.at[ind, 'Status'] = 'Done'
-                self.df_trans.add_data(trans)
+            except:
+                self.df_register.data.at[ind, 'Status'] = 'Fail'
+            if debug:
+                df_file_summary = pd.concat([df_file_summary, pd.DataFrame(dic, index=[row['File']])])
         if save:
-            self.saveTransaction('Test2.csv')
+            self.save_Transactions()
+            self.save_DataRegistry()
+            self.save_AccountLedger()
+            if debug:
+                df_file_summary.to_csv(r'D:\PermanentData\FileSummary.csv')
 
-    def saveDataRegistry(self, path=None):
-        if path is None:
-            self.df_register.data.to_csv(f'{self.path_permData}\\DataRegistry.csv')
+    def save_DataRegistry(self, name=None):
+        if name is None:
+            self.df_register.data.to_csv(self.path_dataReg)
         else:
-            self.df_register.data.to_csv(path)
+            self.df_register.data.to_csv(f'{self.path_permData}\\{name}.csv')
 
-    def saveTransaction(self, name='TransactionHistory.csv'):
-        self.df_trans.data.to_csv(f'{self.path_permData}\\{name}')
-
-
-
-class BankingAccount:
-
-    def __init__(self, name, list_inputfiles):
-        # Input name of institution, read all of the matching source documents, create data frames, then save to excel
-        print("\nCreating bank object for " + name)
-        self.name = name
-        home_dir = findDirectory()
-        name_scfile = r'\\'.join([home_dir, "Statements", self.name + '_df_sourcefile.csv'])
-        name_datfile = r'\\'.join([home_dir, "Statements", self.name + '_dat_sourcefile.csv'])
-        for j in list_inputfiles:
-            if self.name in j:
-                print('Sourcefiles for ', self.name, ' found')
-                print('Opening: ', name_scfile)
-                self.df_sourcefiles = pd.read_csv(name_scfile)
-                print('Opening: ', name_datfile)
-                self.df_data = pd.read_csv(name_datfile)
-                return
-        print('Sourcefile not found, gathering data')
-        self.df_sourcefiles, self.df_data = self.getdata(list)
-        print("Saving source files to: ", name_scfile)
-        self.df_sourcefiles.to_csv(name_scfile)
-        print("Saving data to: ", name_datfile)
-        self.df_data.to_csv(name_datfile)
-        print('Paycheck not in reference table')
-
-    def getdata(self, lst):  # / Look at source files, create data frame for source files and another for data
-        if self.name == 'ClearMotion':
-            df1, df2 = pdftools.ClearMotion(lst)
-            return df1, df2
-        elif self.name == 'iRobot':
-            df1, df2 = pdftools.iRobot(lst)
-            return df1, df2
-        elif self.name == 'Quicksilver':
-            df1, df2 = pdftools.Quicksilver(lst)
-            return df1, df2
-        elif self.name == 'Platinum':
-            df1, df2 = pdftools.Platinum(lst)
-            return df1, df2
-        elif self.name == 'Santander':
-            df1, df2 = pdftools.Santander(lst)
-            return df1, df2
-        elif self.name == 'Peoples':
-            df1, df2 = pdftools.Peoples(lst)
-            return df1, df2
+    def save_Transactions(self, name=None):
+        if name is None:
+            self.df_trans.data.to_csv(self.path_tranHistory)
         else:
-            print("File not supported")
-            return
-
-
-class CreditAccount:
-
-    def __init__(self, name):
-        print(f'Credit account: {name}')
-
-
-class Loan:
-
-    def __init__(self, name):
-        print(f'Loan: {name}')
-
-
-class InvestmentAccount:
-
-    def __init__(self, name):
-        print(f'Investment Account: {name}')
-
-
-class Employer:
-
-    def __init__(self, name):
-        print(f'Investment Account: {name}')
+            self.df_trans.data.to_csv(f'{self.path_permData}\\{name}.csv')
+        
+    def save_AccountLedger(self, name=None):
+        if name is None:
+            self.df_ledger.data.to_csv(self.path_accLedger)
+        else:
+            self.df_ledger.data.to_csv(f'{self.path_permData}\\{name}.csv')
 
 
 class TransactionHistory:
@@ -302,39 +244,27 @@ class DataRegistry:
             new_df = pd.DataFrame(new_data, columns=["File"])
             self.data = pd.concat([self.data, new_df], ignore_index=True)
 
-# Quicksilver = Institution('Quicksilver', list_input_files)
-# Platinum = Institution('Platinum', list_input_files)
-# Santander = Institution('Santander', list_input_files)
-# Peoples = Institution('Peoples', list_input_files)
-# ClearMotion = Institution('ClearMotion', list_input_files)
-# iRobot = Institution('iRobot', list_input_files)
-# print('\n')
 
-# Define time period to analyze
+class AccountLedger:
+    def __init__(self, path=None):
+        if path is not None:
+            if os.path.exists(path):
+                self.data = pd.read_csv(path, index_col=0)
+            else:
+                self.data = pd.DataFrame()
+        else:
+            self.data = pd.DataFrame()
 
-# period_begin = datetime.datetime(year=2020, month=1, day=1)
-# period_end = datetime.datetime(year=2020, month=3, day=1)
+    def add_data(self, dic):
+        if 'Previous Balance' in dic.keys():
+            if 'Period Starting' in dic.keys():
+                self.data = pd.concat([self.data, pd.DataFrame(
+                    {'Date': dic['Period Starting'], dic['Account']: dic['Previous Balance']},
+                    index = [0])], ignore_index=True)
+        if 'New Balance' in dic.keys():
+            if 'Period Ending' in dic.keys():
+                self.data = pd.concat([self.data, pd.DataFrame(
+                    {'Date': dic['Period Ending'], dic['Account']: dic['New Balance']},
+                    index = [0])], ignore_index=True)
 
-# Aggregate source files
 
-# all_inp_files = pd.concat([Quicksilver.df_sourcefiles,
-#                            Platinum.df_sourcefiles,
-#                            # Santander.df_sourcefiles,
-#                            Peoples.df_sourcefiles,
-#                            ClearMotion.df_sourcefiles,
-#                            iRobot.df_sourcefiles], ignore_index=True)
-
-# pltfunctions.available_data(all_inp_files, period_begin, period_end)
-
-# Aggregate data
-
-# all_transactions = pd.concat([Quicksilver.df_data,
-#                               Platinum.df_data,
-#                               Peoples.df_data], ignore_index=True)
-# Peoples.df_data,
-# Santander.df_data], ignore_index=True)
-
-# all_paychecks = pd.concat([ClearMotion.df_data,
-#                            iRobot.df_data], ignore_index=True)
-
-# print(all_transactions)
