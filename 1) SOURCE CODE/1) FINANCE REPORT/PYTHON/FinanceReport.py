@@ -1,19 +1,15 @@
-import pdftools
-import os
+import matplotlib.pyplot as plt
 import pandas as pd
+import os
 import win32api
-from datetime import *
+import datetime
 
-from Betterment import *
-from Santander import *
-from PeoplesCreditUnion import *
-from CapitalOne import *
-from Nelnet import *
-from iRobot import *
-from Fidelity import *
+from CardStatements import CapitalOneStatement, SantanderStatement, PeoplesStatement
+from InvestmentStatements import FidelityStatement, BettermentStatement
+from LoanStatements import NelnetStatement
+from Paychecks import IRobotPaycheck, ClearMotionPaycheck
 
-
-# right_now = datetime.date.today()
+right_now = datetime.date.today()
 
 
 def categorize(s):
@@ -60,7 +56,7 @@ def df_filter_time(df, start, end):
             return df[period]
 
 
-def findDirectory(keyword='FINANCE'):
+def finddirectory(keyword='FINANCE'):
     drives = win32api.GetLogicalDriveStrings()
     drives = drives.split('\000')[:-1]
     for i in drives:
@@ -73,12 +69,12 @@ def findDirectory(keyword='FINANCE'):
 class Report:
     def __init__(self, title=None, path=None, bool_debug=False):
         if path is None:
-            self.path = findDirectory()
+            self.path = finddirectory()
         else:
             self.path = path
 
         if title is None:
-            self.title = f'Finance Report - {datetime.date.today()}'
+            self.title = f'Finance Report - {right_now}'
         else:
             self.title = title
 
@@ -92,6 +88,9 @@ class Report:
             self.path_dataReg = f'{self.path_permData}\\DataRegistry.csv'
             self.path_tranHistory = f'{self.path_permData}\\TransactionHistory.csv'
             self.path_accLedger = f'{self.path_permData}\\AccountLedger.csv'
+        else:
+            print('Working drive not found')
+            return
 
         self.df_trans = TransactionHistory(path=self.path_tranHistory, bool_debug=bool_debug)
         self.df_register = DataRegistry(path=self.path_dataReg, bool_debug=bool_debug)
@@ -103,54 +102,30 @@ class Report:
             print(f"Transaction data: {len(self.df_trans.data.index)} records found")
             print(f"Data Registry: {len(self.df_register.data.index)} files found")
 
-    def extract_data(self, path):
-        dat = None
-        dic = None
+    def extract_data(self, path, process=True):
+        obj = None
         if os.path.exists(path):
             if 'betterment' in path.lower():
-                # f = BettermentStatement(path)
-                # print(f'Not yet supported {path}')
-                f = None
+                obj = BettermentStatement(path, process=process)
             elif 'santander' in path.lower():
-                # f = SantanderStatement(path)
-                # print(f'Not yet supported {path}')
-                f = None
+                obj = SantanderStatement(path, process=process)
             elif 'peoples' in path.lower():
-                # f = PeoplesCreditUnionStatement(path)
-                # print(f'Not yet supported {path}')
-                f = None
+                obj = PeoplesStatement(path, process=process)
             elif 'quicksilver' in path.lower():
-                f = CapitalOneStatement(path, account='Quicksilver')
-                f.read_data()
-                dat = f.transactions
-                dic = f.summary
+                obj = CapitalOneStatement(path, account='Quicksilver', process=process)
             elif 'platinum' in path.lower():
-                f = CapitalOneStatement(path, account='Platinum')
-                f.read_data()
-                dat = f.transactions
-                dic = f.summary
+                obj = CapitalOneStatement(path, account='Platinum', process=process)
             elif 'nelnet' in path.lower():
-                # f = NelnetStatement(path)
-                # print(f'Not yet supported {path}')
-                f = None
+                obj = NelnetStatement(path, process=process)
             elif 'irobot' in path.lower():
-                # f = iRobotPaycheck(path)
-                # print(f'Not yet supported {path}')
-                f = None
+                obj = IRobotPaycheck(path, process=process)
             elif 'fidelity' in path.lower():
-                # f = FidelityStatement(path)
-                # print(f'Not yet supported {path}')
-                f = None
+                obj = FidelityStatement(path, process=process)
             elif 'clearmotion' in path.lower():
-                # f = FidelityStatement(path)
-                # print(f'Not yet supported {path}')
-                f = None
-            else:
-                # print(f'File not recognized: {path}')
-                f = None
+                obj = ClearMotionPaycheck(path, process=process)
         else:
             print(f'Path invalid: {path}')
-        return dat, dic
+        return obj
 
     def register_new_files(self, save=True):
         discovered_files = os.listdir(self.path_rawData)
@@ -162,7 +137,7 @@ class Report:
                 newline = pd.DataFrame({'File': [new_file], 'Status': ['New']})
                 self.df_register.add_data(newline)
         if save:
-            self.save_DataRegistry()
+            self.save_dataregistry()
 
     def process_new_files(self, save=True, debug=False):
         df_file_summary = pd.DataFrame()
@@ -180,25 +155,25 @@ class Report:
             if debug:
                 df_file_summary = pd.concat([df_file_summary, pd.DataFrame(dic, index=[row['File']])])
         if save:
-            self.save_Transactions()
-            self.save_DataRegistry()
-            self.save_AccountLedger()
+            self.save_transactions()
+            self.save_dataregistry()
+            self.save_accountledger()
             if debug:
-                df_file_summary.to_csv(r'D:\PermanentData\FileSummary.csv')
+                df_file_summary.to_csv(f'{self.path_artifacts}\\FileSummary.csv')
 
-    def save_DataRegistry(self, name=None):
+    def save_dataregistry(self, name=None):
         if name is None:
             self.df_register.data.to_csv(self.path_dataReg)
         else:
             self.df_register.data.to_csv(f'{self.path_permData}\\{name}.csv')
 
-    def save_Transactions(self, name=None):
+    def save_transactions(self, name=None):
         if name is None:
             self.df_trans.data.to_csv(self.path_tranHistory)
         else:
             self.df_trans.data.to_csv(f'{self.path_permData}\\{name}.csv')
-        
-    def save_AccountLedger(self, name=None):
+
+    def save_accountledger(self, name=None):
         if name is None:
             self.df_ledger.data.to_csv(self.path_accLedger)
         else:
@@ -260,11 +235,15 @@ class AccountLedger:
             if 'Period Starting' in dic.keys():
                 self.data = pd.concat([self.data, pd.DataFrame(
                     {'Date': dic['Period Starting'], dic['Account']: dic['Previous Balance']},
-                    index = [0])], ignore_index=True)
+                    index=[0])], ignore_index=True)
         if 'New Balance' in dic.keys():
             if 'Period Ending' in dic.keys():
                 self.data = pd.concat([self.data, pd.DataFrame(
                     {'Date': dic['Period Ending'], dic['Account']: dic['New Balance']},
-                    index = [0])], ignore_index=True)
+                    index=[0])], ignore_index=True)
 
-
+    def plot(self):
+        cpy = self.data.set_index('Date')
+        plt.plot(cpy)
+        plt.legend()
+        plt.show()

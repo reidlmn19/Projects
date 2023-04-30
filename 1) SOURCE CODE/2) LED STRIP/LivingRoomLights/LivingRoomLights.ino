@@ -2,16 +2,21 @@
 
 int blue_primary = 0;
 int blue_secondary = 0;
-int blue_tertiary = 0;
+int blue_tertiary = 30;
+
 int green_primary = 0;
 int green_secondary = 255;
-int green_tertiary = 18;
+int green_tertiary = 100;
+
 int len_LED_strip = 200;
 int len_LED_segments = 20;
+
 int pin_LED_data = 3;
+
 int red_primary = 255;
 int red_secondary = 0;
-int red_tertiary = 190;
+int red_tertiary = 255;
+
 int g_state;
 int pix = 25;
 
@@ -240,4 +245,3 @@ rgb hsv2rgb(hsv in)
     }
     return out;     
 }
-

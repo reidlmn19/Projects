@@ -60,18 +60,46 @@ def str_to_number(s):
         pass
 
 
-class CapitalOneStatement:
-    def __init__(self, path, account=None):
+class CardStatement:
+    def __init__(self, path=None, account=None, institution=None, process=True):
         self.path = path
-        self.institution = 'CapitalOne'
-        self.type = 'Statement'
-        if account is None:
-            self.account = 'Unknown'
-        else:
-            self.account = account
+        self.account = account
+        self.institution = institution
 
+        self.rawdata = None
         self.summary = {}
         self.transactions = pd.DataFrame()
+        if process:
+            self.process()
+
+    def process(self):
+        raw_data = self.get_rawdata()
+        self.get_summary(raw_data)
+        self.get_transactions(raw_data)
+
+    def get_summary(self, data):
+        print(f'Get summary not defined for {self.institution}')
+
+    def get_rawdata(self):
+        print(f'Get raw data not defined for {self.institution}')
+
+    def get_transactions(self, data):
+        print(f'Get transactions not defined for {self.institution}')
+
+
+class SantanderStatement(CardStatement):
+    def __init__(self, path=None, account='Checking', institution='Santander', process=True):
+        super().__init__(path=path, account=account, institution=institution, process=process)
+
+
+class PeoplesStatement(CardStatement):
+    def __init__(self, path=None, account='Checking', institution='Peoples', process=True):
+        super().__init__(path=path, account=account, institution=institution, process=process)
+
+
+class CapitalOneStatement(CardStatement):
+    def __init__(self, path=None, account=None, institution='CapitalOne', process=True):
+        super().__init__(path=path, account=account, institution=institution, process=process)
 
     def get_summary(self, lst, debug=False):
         if debug:
@@ -363,23 +391,11 @@ class CapitalOneStatement:
         if debug:
             transactions.to_csv('D:\Artifacts\Test2.csv')
 
-    def read_data(self, debug=False):
+    def get_rawdata(self, debug=False):
         pages_list = []
         reader = PyPDF2.PdfReader(self.path)
         for page in reader.pages:
             page_text = page.extract_text()
             page_list = page_text.split('\n')
             pages_list.extend(page_list)
-
-        try:
-            self.get_summary2(pages_list, debug=debug)
-            self.get_transactions2(pages_list, debug=debug)
-        except:
-            print(f'Failed once: {self.path}')
-
-        if len(self.transactions)<2:
-            try:
-                self.get_summary(pages_list, debug=debug)
-                self.get_transactions(pages_list, debug=debug)
-            except:
-                print(f'Failed twice: {self.path}')
+        self.rawdata = pages_list
