@@ -1,4 +1,5 @@
 from datetime import datetime
+import pandas as pd
 
 
 def str_to_date(s, year=None):
@@ -99,6 +100,29 @@ def categorize(s):
     return 'Unknown'
 
 
-def santander_transaction(s, account):
-    entry = None
-    print(account)
+def santander_transaction(s, account=None, years=None):
+    df = pd.DataFrame()
+    if 'Account Activity (Cont. for Acct#' in s:
+        s = s.split('Page')[0]
+    lst = s.split()
+    if len(lst) > 3:
+        try:
+            df.at[0, 'Date'] = str_to_date(lst[0])[0]
+            df.at[0, 'Description'] = ' '.join(lst[1:-2])
+            df.at[0, 'Amount'] = str_to_number(lst[-2])
+            df.at[0, 'Balance'] = str_to_number(lst[-1])
+
+            if account is not None:
+                df.at[0, 'Account'] = account
+
+            if years is not None:
+                if df.at[0, 'Date'].month == 1:
+                    df.at[0, 'Date'] = df.at[0, 'Date'].replace(year=years[1])
+                else:
+                    df.at[0, 'Date'] = df.at[0, 'Date'].replace(year=years[0])
+        except:
+            return None
+        if df.isnull().values.any():
+            return None
+        else:
+            return df

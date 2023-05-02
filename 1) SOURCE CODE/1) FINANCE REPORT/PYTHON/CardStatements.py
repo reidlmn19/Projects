@@ -92,12 +92,12 @@ class SantanderStatement(CardStatement):
         self.summary = summary
 
     def get_transactions(self, debug=False):
+        yr_rng = [self.summary['Period Starting'].year, self.summary['Period Ending'].year]
         state = 0
         last_state = 0
         account = 'Checking'
         text_buffer = ''
         lst = self.rawdata.split('\n')
-        entry_dic = {}
 
         if debug:
             print(lst)
@@ -118,31 +118,36 @@ class SantanderStatement(CardStatement):
                         state = 2
                     elif last_state == 3:
                         state = 4
+                elif last_state == 2:
+                    state = 2
+                elif last_state == 4:
+                    state = 4
             elif state == 2:
-                entry = santander_transaction(item, account=account)
+                entry = santander_transaction(item, account=account, years=yr_rng)
                 if entry is not None:
-                    self.transactions = pd.concat([self.transactions,
-                                                   pd.DataFrame(entry_dic, index=[0])], ignore_index=True)
+                    self.transactions = pd.concat([self.transactions, entry], ignore_index=True)
                     text_buffer = ''
                 elif len(text_buffer) > 0:
-                    entry = santander_transaction(f'{text_buffer} {item}', account=account)
+                    entry = santander_transaction(f'{text_buffer} {item}'.replace('$', ' '),
+                                                  account=account, years=yr_rng)
                     if entry is not None:
-                        self.transactions = pd.concat([self.transactions,
-                                                       pd.DataFrame(entry_dic, index=[0])], ignore_index=True)
+                        self.transactions = pd.concat([self.transactions, entry], ignore_index=True)
                         text_buffer = ''
                 else:
                     text_buffer = text_buffer + item
+            elif state == 3:
+                account = 'Savings'
+                text_buffer = ''
             elif state == 4:
-                entry = santander_transaction(item, account=account)
+                entry = santander_transaction(item, account=account, years=yr_rng)
                 if entry is not None:
-                    self.transactions = pd.concat([self.transactions,
-                                                   pd.DataFrame(entry_dic, index=[0])], ignore_index=True)
+                    self.transactions = pd.concat([self.transactions, entry], ignore_index=True)
                     text_buffer = ''
                 elif len(text_buffer) > 0:
-                    entry = santander_transaction(f'{text_buffer} {item}', account=account)
+                    entry = santander_transaction(f'{text_buffer} {item}'.replace('$', ' '),
+                                                  account=account, years=yr_rng)
                     if entry is not None:
-                        self.transactions = pd.concat([self.transactions,
-                                                       pd.DataFrame(entry_dic, index=[0])], ignore_index=True)
+                        self.transactions = pd.concat([self.transactions, entry], ignore_index=True)
                         text_buffer = ''
                 else:
                     text_buffer = text_buffer + item
