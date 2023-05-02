@@ -12,50 +12,6 @@ from Paychecks import IRobotPaycheck, ClearMotionPaycheck
 right_now = datetime.date.today()
 
 
-def categorize(s):
-    dic = {'Subscriptions': ['Apple', 'Spotify'],
-           'Groceries': ['Crosby', 'Market', 'Basket', 'Wegmans', 'Hannaford', 'WHOLEFDS', 'stop & shop',
-                         'LENS.COM',
-                         'PETSMART', 'SHOP N` GO'],
-           'Restaurants': ['Resta', 'Kitchen', 'Grill', 'Bambolina', 'Burger', 'Wendy', 'Blue Lobster', 'Deli',
-                           '5Guys',
-                           'PASQUALES', 'CHRISTINAS', 'A1JAPANESEHOUSEROCHESTERNH', 'OPUS', 'Italian', 'Lobsta',
-                           'PIZZA', 'Mcdonald', 'Flatbread', 'Wingstop', 'CK PEARL', 'SETTLER'],
-           'Alcohol': ['Night Shift', 'Playoffs', 'DNCSS TD GARDEN CONCESBOSTONMA', 'LIQUOR', 'BREWING', 'SHY BIRD',
-                       'DEST: SEA'],
-           'Travel': ['Jetblue', 'Uber', 'NEWPORT', 'MATTERHORN', 'u-haul', 'KINGSTONRI', 'Vietnam', 'Cruiseport',
-                      'NH State Pa'],
-           'Ski': ['IKON', 'Killington', 'TICKETSATWORK', 'SMUGGLERS', 'WaitsfieldVT', 'TREMBLA', 'Loon'],
-           'Car': ['ARTISAN WEST GARASOMERVILLEMA', 'EXXONMOBIL', 'SUNOCO', 'Shell', 'cumberland', '7-eleven',
-                   'A.L. PRIME', 'AL PRIME', 'AUTO', 'RMV', 'E-ZPass', 'Gulf', 'CIRCLE K', 'DCR'],
-           'Stores': ['Best Buy', 'Target', 'BestBuy', 'Kohl', 'Dick', 'REI', 'Walmart', 'NORDSTROM', 'Guitar',
-                      'Savers', 'Depot', 'LOGITECH', 'DIGI KEY', 'CRAIGSLIST', 'HOMEGOODS', 'HALLOWEE'],
-           'Amazon': ['Amazon', 'AMZN'],
-           'Gaming': ['STEAMGAMES', 'BLIZZARD', 'Microsoft', 'Nintendo'],
-           'Golf': ['GOLF', 'Owl'],
-           'Gifts': ['URI', 'HYDROFLASK', 'SOUFEEL'],
-           'Charges': ['Adjustment', 'PYMTAuthDate', 'Capital One'],
-           'Living': ['Fully', 'COMCAST', 'Pet', 'Animal'],
-           'Venmo': ['Venmo'],
-           'Income': ['Payroll', 'Acorns', 'IRS treas']
-           }
-    for i in dic:
-        for j in dic[i]:
-            if j.lower() in s.lower():
-                return i
-    return 'Unknown'
-
-
-def df_filter_time(df, start, end):
-    for i in df.columns:
-        if i in ['Date', 'Pay Date']:
-            col = i
-            after_start = df[col] >= start
-            before_end = df[col] < end
-            period = after_start & before_end
-            return df[period]
-
-
 def finddirectory(keyword='FINANCE'):
     drives = win32api.GetLogicalDriveStrings()
     drives = drives.split('\000')[:-1]

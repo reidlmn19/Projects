@@ -1,63 +1,7 @@
 from datetime import *
 import pandas as pd
 import PyPDF2
-
-
-def str_to_date(s, year=None):
-    formats = [
-        '%b. %d, %Y',
-        '%b %d, %Y',
-        '%b %d',
-        '%d-%b'
-    ]
-    for f in formats:
-        try:
-            d = datetime.strptime(s, f)
-            if year:
-                d = d.replace(year=year)
-            return [d]
-        except:
-            pass
-    if len(s) >= 10:
-        try:
-            split = s.split(' - ')
-            d1 = split[0].strip()
-            d2 = split[1].strip()
-            if '.' in d1:
-                d = [datetime.strptime(d1, '%b. %d, %Y'), datetime.strptime(d2, '%b. %d, %Y')]
-            else:
-                d = [datetime.strptime(d1, '%b %d, %Y'), datetime.strptime(d2, '%b %d, %Y')]
-            return d
-        except:
-            pass
-    return None
-
-
-def str_to_number(s):
-    pos = False
-    neg = False
-    if '$' in s:
-        s = s.replace('$', '')
-    if ',' in s:
-        s = s.replace(',', '')
-    if '=' in s:
-        s = s.replace('=', '')
-    if '+' in s:
-        s = s.replace('+', '')
-        pos = True
-    elif '-' in s:
-        s = s.replace('-', '')
-        neg = True
-    s.strip()
-    try:
-        num = float(s)
-        if pos:
-            num = abs(num)
-        elif neg:
-            num = abs(num) * -1
-        return num
-    except:
-        pass
+from StringTools import str_to_date, str_to_number, santander_transaction
 
 
 class CardStatement:
@@ -77,19 +21,140 @@ class CardStatement:
         self.get_summary(raw_data)
         self.get_transactions(raw_data)
 
-    def get_summary(self, data):
+    def get_summary(self):
         print(f'Get summary not defined for {self.institution}')
 
     def get_rawdata(self):
         print(f'Get raw data not defined for {self.institution}')
 
-    def get_transactions(self, data):
+    def get_transactions(self):
         print(f'Get transactions not defined for {self.institution}')
 
 
 class SantanderStatement(CardStatement):
-    def __init__(self, path=None, account='Checking', institution='Santander', process=True):
+    def __init__(self, path=None, account='Checking/Savings', institution='Santander', process=True):
         super().__init__(path=path, account=account, institution=institution, process=process)
+
+    def get_rawdata(self, debug=False):
+        pages_text = ''
+        reader = PyPDF2.PdfReader(self.path)
+        for page in reader.pages:
+            page_text = page.extract_text()
+            pages_text = pages_text + page_text
+        self.rawdata = pages_text
+
+    def get_summary(self, debug=False):
+        lst = self.rawdata.split('\n')
+        if debug:
+            print(lst)
+
+        keywords = {
+            'Deposit Accounts Account Number Average Daily Balance Current Balance': 2
+        }
+
+        state = 1
+        summary = {}
+        for item in lst:
+            item = item.strip()
+
+            if state == 0:
+                pass
+            elif state == 1:
+                if 'Statement Period' in item:
+                    splt = item.split()
+                    d1 = str_to_date(splt[2])
+                    if d1 is not None:
+                        summary['Period Starting'] = d1[0]
+                    d2 = str_to_date(splt[4])
+                    if d1 is not None:
+                        summary['Period Ending'] = d2[0]
+                state = 0
+            elif state == 2:
+                splt = item.split()
+                n = str_to_number(splt[-1])
+                if n is not None:
+                    summary['Current Checking Balance'] = n
+                state = 3
+            elif state == 3:
+                splt = item.split()
+                n = str_to_number(splt[-1])
+                if n is not None:
+                    summary['Current Savings Balance'] = n
+                state = 0
+
+            if item in keywords.keys():
+                last_keyword = item
+                state = keywords[item]
+                counter = 0
+
+        summary['Institution'] = self.institution
+        summary['Account'] = self.account
+        self.summary = summary
+
+    def get_transactions(self, debug=False):
+        state = 0
+        last_state = 0
+        account = 'Checking'
+        text_buffer = ''
+        lst = self.rawdata.split('\n')
+        entry_dic = {}
+
+        if debug:
+            print(lst)
+
+        keywords = {
+            'Date Description Additions Subtractions Balance': 1,
+            'Ending Balance': 3,
+        }
+
+        for item in lst:
+            item = item.strip()
+
+            if state == 0:
+                pass
+            elif state == 1:
+                if 'Beginning Balance' in item:
+                    if last_state == 0:
+                        state = 2
+                    elif last_state == 3:
+                        state = 4
+            elif state == 2:
+                entry = santander_transaction(item, account=account)
+                if entry is not None:
+                    self.transactions = pd.concat([self.transactions,
+                                                   pd.DataFrame(entry_dic, index=[0])], ignore_index=True)
+                    text_buffer = ''
+                elif len(text_buffer) > 0:
+                    entry = santander_transaction(f'{text_buffer} {item}', account=account)
+                    if entry is not None:
+                        self.transactions = pd.concat([self.transactions,
+                                                       pd.DataFrame(entry_dic, index=[0])], ignore_index=True)
+                        text_buffer = ''
+                else:
+                    text_buffer = text_buffer + item
+            elif state == 4:
+                entry = santander_transaction(item, account=account)
+                if entry is not None:
+                    self.transactions = pd.concat([self.transactions,
+                                                   pd.DataFrame(entry_dic, index=[0])], ignore_index=True)
+                    text_buffer = ''
+                elif len(text_buffer) > 0:
+                    entry = santander_transaction(f'{text_buffer} {item}', account=account)
+                    if entry is not None:
+                        self.transactions = pd.concat([self.transactions,
+                                                       pd.DataFrame(entry_dic, index=[0])], ignore_index=True)
+                        text_buffer = ''
+                else:
+                    text_buffer = text_buffer + item
+
+            if item in keywords.keys():
+                last_state = state
+                state = keywords[item]
+            else:
+                for key in keywords.keys():
+                    if key in item:
+                        last_state = state
+                        state = keywords[key]
 
 
 class PeoplesStatement(CardStatement):
