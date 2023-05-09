@@ -1,7 +1,42 @@
 from datetime import *
+from tabulate import tabulate
 import pandas as pd
+import numpy as np
 import PyPDF2
-from StringTools import str_to_date, str_to_number, santander_transaction
+from StringTools import str_to_date, str_to_number
+
+
+# For every card statement you need a summary including start date, end date,
+# starting balance, and ending balance (for each account on the statement)
+# The transaction table requires a Date, Amount, and Description. A Ledger is preferred but
+# not necessary
+
+def santander_transaction(s, account=None, years=None):
+    df = pd.DataFrame()
+    if 'Account Activity (Cont. for Acct#' in s:
+        s = s.split('Page')[0]
+    lst = s.split()
+    if len(lst) > 3:
+        try:
+            df.at[0, 'Date'] = str_to_date(lst[0])[0]
+            df.at[0, 'Description'] = ' '.join(lst[1:-2])
+            df.at[0, 'Amount'] = str_to_number(lst[-2])
+            df.at[0, 'Balance'] = str_to_number(lst[-1])
+
+            if account is not None:
+                df.at[0, 'Account'] = account
+
+            if years is not None:
+                if df.at[0, 'Date'].month == 1:
+                    df.at[0, 'Date'] = df.at[0, 'Date'].replace(year=years[1])
+                else:
+                    df.at[0, 'Date'] = df.at[0, 'Date'].replace(year=years[0])
+        except:
+            return None
+        if df.isnull().values.any():
+            return None
+        else:
+            return df
 
 
 class CardStatement:
@@ -17,15 +52,23 @@ class CardStatement:
             self.process()
 
     def process(self):
-        raw_data = self.get_rawdata()
-        self.get_summary(raw_data)
-        self.get_transactions(raw_data)
-
-    def get_summary(self):
-        print(f'Get summary not defined for {self.institution}')
+        self.get_rawdata()
+        self.get_summary()
+        self.get_transactions()
 
     def get_rawdata(self):
-        print(f'Get raw data not defined for {self.institution}')
+        pages_text = ''
+        reader = PyPDF2.PdfReader(self.path)
+        for page in reader.pages:
+            page_text = page.extract_text()
+            pages_text = pages_text + page_text
+        self.rawdata = pages_text
+
+    def get_summary(self):
+        self.summary = {'Starting Balance': None,
+                        'Ending Balance': None,
+                        'Starting Date': None,
+                        'Ending Date': None}
 
     def get_transactions(self):
         print(f'Get transactions not defined for {self.institution}')
@@ -35,64 +78,65 @@ class SantanderStatement(CardStatement):
     def __init__(self, path=None, account='Checking/Savings', institution='Santander', process=True):
         super().__init__(path=path, account=account, institution=institution, process=process)
 
-    def get_rawdata(self, debug=False):
-        pages_text = ''
-        reader = PyPDF2.PdfReader(self.path)
-        for page in reader.pages:
-            page_text = page.extract_text()
-            pages_text = pages_text + page_text
-        self.rawdata = pages_text
-
     def get_summary(self, debug=False):
         lst = self.rawdata.split('\n')
+        state = 0
+        last_state = 0
+        last_item = ''
+        date_range = None
+
         if debug:
             print(lst)
 
         keywords = {
-            'Deposit Accounts Account Number Average Daily Balance Current Balance': 2
+            'STUDENT VALUE CHECKING Statement Period': 1,
+            'Balances': 2,
+            'SANTANDER SAVINGS Statement Period': 3
         }
 
-        state = 1
-        summary = {}
         for item in lst:
             item = item.strip()
 
             if state == 0:
                 pass
             elif state == 1:
-                if 'Statement Period' in item:
-                    splt = item.split()
-                    d1 = str_to_date(splt[2])
-                    if d1 is not None:
-                        summary['Period Starting'] = d1[0]
-                    d2 = str_to_date(splt[4])
-                    if d1 is not None:
-                        summary['Period Ending'] = d2[0]
-                state = 0
+                splt = last_item.replace('STUDENT VALUE CHECKING Statement Period ', '').split()
+                d1 = str_to_date(splt[0])
+                d2 = str_to_date(splt[-1])
+                if d1 is not None:
+                    self.summary['Starting Date'] = d1[0]
+                if d2 is not None:
+                    self.summary['Ending Date'] = d2[0]
             elif state == 2:
-                splt = item.split()
-                n = str_to_number(splt[-1])
-                if n is not None:
-                    summary['Current Checking Balance'] = n
-                state = 3
-            elif state == 3:
-                splt = item.split()
-                n = str_to_number(splt[-1])
-                if n is not None:
-                    summary['Current Savings Balance'] = n
+                if last_state == 1:
+                    if 'Beginning Balance ' in item:
+                        a1 = str_to_number(item.replace('Beginning Balance ', '').split()[0])
+                        if a1 is not None:
+                            self.summary['Starting Balance Checking'] = a1
+                    if 'Current Balance' in item:
+                        a2 = str_to_number(item.split()[-1])
+                        if a2 is not None:
+                            self.summary['Ending Balance Checking'] = a2
+                elif last_state == 3:
+                    if 'Beginning Balance ' in item:
+                        a1 = str_to_number(item.replace('Beginning Balance ', '').split()[0])
+                        if a1 is not None:
+                            self.summary['Starting Balance Savings'] = a1
+                    if 'Current Balance' in item:
+                        a2 = str_to_number(item.split()[-1])
+                        if a2 is not None:
+                            self.summary['Ending Balance Savings'] = a2
+                last_state = state
                 state = 0
 
-            if item in keywords.keys():
-                last_keyword = item
-                state = keywords[item]
-                counter = 0
-
-        summary['Institution'] = self.institution
-        summary['Account'] = self.account
-        self.summary = summary
+            for key in keywords.keys():
+                if key in item:
+                    last_state = state
+                    state = keywords[key]
+                    last_item = item
 
     def get_transactions(self, debug=False):
-        yr_rng = [self.summary['Period Starting'].year, self.summary['Period Ending'].year]
+        yr_rng = [self.summary['Starting Date'].year, self.summary['Ending Date'].year]
         state = 0
         last_state = 0
         account = 'Checking'
@@ -136,8 +180,11 @@ class SantanderStatement(CardStatement):
                 else:
                     text_buffer = text_buffer + item
             elif state == 3:
-                account = 'Savings'
-                text_buffer = ''
+                if last_state == 4:
+                    break
+                else:
+                    account = 'Savings'
+                    text_buffer = ''
             elif state == 4:
                 entry = santander_transaction(item, account=account, years=yr_rng)
                 if entry is not None:
@@ -160,6 +207,35 @@ class SantanderStatement(CardStatement):
                     if key in item:
                         last_state = state
                         state = keywords[key]
+        self.fix_amount_signs()
+        self.transactions['Institution'] = self.institution
+
+    def fix_amount_signs(self):
+        check_balance = pd.DataFrame({'Date': self.summary['Starting Date'],
+                                      'Description': 'Ignore',
+                                      'Amount': 0,
+                                      'Balance': self.summary['Starting Balance Checking'],
+                                      'Account': 'Checking'}, index=[0])
+        save_balance = pd.DataFrame({'Date': self.summary['Starting Date'],
+                                     'Description': 'Ignore',
+                                     'Amount': 0,
+                                     'Balance': self.summary['Starting Balance Savings'],
+                                     'Account': 'Savings'}, index=[0])
+        self.transactions = pd.concat([check_balance, save_balance, self.transactions]).reset_index(drop=True)
+
+        df1 = self.transactions.set_index('Date')
+        df1 = df1[df1['Account'] == 'Checking']
+        df1['Sign1'] = df1['Balance'].diff() < 0
+        df1['Amount'] = np.where(df1['Sign1'], -df1['Amount'], df1['Amount'])
+
+        df2 = self.transactions.set_index('Date')
+        df2 = df2[df2['Account'] == 'Savings']
+        df2['Sign2'] = df2['Balance'].diff() < 0
+        df2['Amount'] = np.where(df2['Sign2'], -df2['Amount'], df2['Amount'])
+
+        self.transactions = pd.concat([df1, df2]).drop(columns=['Sign1', 'Sign2'])
+        self.transactions = self.transactions.drop(self.transactions[self.transactions['Amount'] == 0].index)
+        self.transactions.reset_index(inplace=True)
 
 
 class PeoplesStatement(CardStatement):
@@ -171,108 +247,62 @@ class CapitalOneStatement(CardStatement):
     def __init__(self, path=None, account=None, institution='CapitalOne', process=True):
         super().__init__(path=path, account=account, institution=institution, process=process)
 
-    def get_summary(self, lst, debug=False):
+    def get_summary(self, debug=False):
+        lst = self.rawdata.split('\n')
+        state = 0
+        last_state = 0
+        last_item = ''
+        date_range = None
+
         if debug:
             print(lst)
 
         keywords = {
-            'Previous Balance': 1,
-            'Other Credits': 1,
-            'Transactions': 1,
-            'Cash Advances': 1,
-            'Fees Charged': 1,
-            'Interest Charged': 1,
-            'New Balance': 1,
-            'Credit Limit': 2,
-            'Cash Advance Credit Limit': 1,
-            'Available Credit for Cash Advances': 1,
-            'Payment Due Date': 4,
-            'Minimum Payment Due': 1,
-            '  |  ': 5,
-            'Visa Signature Account Ending in': 6,
-            'Previous': 7,
-            'Adjusted': 7,
-            'Earned': 7,
-            'Transferred In': 7,
-            'Redeemed': 7,
-            'Transferred Out': 7,
-            'Rewards': 7,
-            '-': 8
+            'STUDENT VALUE CHECKING Statement Period': 1,
+            'Balances': 2,
+            'SANTANDER SAVINGS Statement Period': 3
         }
 
-        df = pd.DataFrame(columns=['Item', 'Flag'])
-        state = 0
-        last_keyword = ''
-        last_item = ''
-        summary = {}
         for item in lst:
             item = item.strip()
-            s2d = str_to_date(item)
-            s2n = str_to_number(item)
 
             if state == 0:
                 pass
             elif state == 1:
-                if s2n is not None:
-                    summary[last_keyword] = s2n
-                state = 0
+                splt = last_item.replace('STUDENT VALUE CHECKING Statement Period ', '').split()
+                d1 = str_to_date(splt[0])
+                d2 = str_to_date(splt[-1])
+                if d1 is not None:
+                    self.summary['Starting Date'] = d1[0]
+                if d2 is not None:
+                    self.summary['Ending Date'] = d2[0]
             elif state == 2:
-                if s2n is not None:
-                    summary[last_keyword] = s2n
-                state = 3
-            elif state == 3:
-                if s2n is not None:
-                    summary['Available Credit'] = s2n
-                state = 0
-            elif state == 4:
-                if s2d is not None:
-                    summary[last_keyword] = s2d[0]
-                state = 0
-            elif state == 5:
-                if s2n is not None:
-                    summary['Days in Billing Cycle'] = s2n
-                state = 0
-            elif state == 6:
-                if s2n is not None:
-                    summary['Payments'] = s2n
-                state = 0
-            elif state == 7:
-                if s2n is not None:
-                    summary[f"{last_keyword} Earnings"] = s2n
-                state = 0
-            elif state == 8:
-                if s2d is not None:
-                    summary["Period Ending"] = s2d[0]
-                    summary["Period Starting"] = p_start
+                if last_state == 1:
+                    if 'Beginning Balance ' in item:
+                        a1 = str_to_number(item.replace('Beginning Balance ', '').split()[0])
+                        if a1 is not None:
+                            self.summary['Starting Balance Checking'] = a1
+                    if 'Current Balance' in item:
+                        a2 = str_to_number(item.split()[-1])
+                        if a2 is not None:
+                            self.summary['Ending Balance Checking'] = a2
+                elif last_state == 3:
+                    if 'Beginning Balance ' in item:
+                        a1 = str_to_number(item.replace('Beginning Balance ', '').split()[0])
+                        if a1 is not None:
+                            self.summary['Starting Balance Savings'] = a1
+                    if 'Current Balance' in item:
+                        a2 = str_to_number(item.split()[-1])
+                        if a2 is not None:
+                            self.summary['Ending Balance Savings'] = a2
+                last_state = state
                 state = 0
 
-            if item in keywords.keys():
-                df = pd.concat([df, pd.DataFrame({'Item': item, 'Flag': keywords[item]}, index=[0])], ignore_index=True)
-                state = keywords[item]
-                last_keyword = item
-                n = 0
-                while last_keyword in summary.keys():
-                    n += 1
-                    last_keyword = item + str(n)
-            elif s2d is not None:
-                df = pd.concat([df, pd.DataFrame({'Item': item, 'Flag': s2d}, index=range(len(s2d)))],
-                               ignore_index=True)
-            elif s2n is not None:
-                df = pd.concat([df, pd.DataFrame({'Item': item, 'Flag': s2n}, index=[0])], ignore_index=True)
-            else:
-                df = pd.concat([df, pd.DataFrame({'Item': item, 'Flag': None}, index=[0])], ignore_index=True)
-
-            if state == 8:
-                if str_to_date(last_item) is not None:
-                    p_start = str_to_date(last_item)[0]
-                else:
-                    state = 0
-            last_item = item
-
-        if debug:
-            df.to_csv('D:\Artifacts\Test.csv')
-        summary['Account'] = self.account
-        self.summary = summary
+            for key in keywords.keys():
+                if key in item:
+                    last_state = state
+                    state = keywords[key]
+                    last_item = item
 
     def get_summary2(self, lst, debug=False):
         keywords = {
@@ -334,7 +364,8 @@ class CapitalOneStatement(CardStatement):
         summary['Account'] = self.account
         self.summary = summary
 
-    def get_transactions(self, lst, debug=False):
+    def get_transactions(self, debug=False):
+        lst = self.rawdata.split('\n')
         transactions = pd.DataFrame()
         state = 0
         next_entry = {}
@@ -460,12 +491,3 @@ class CapitalOneStatement(CardStatement):
         self.transactions = transactions
         if debug:
             transactions.to_csv('D:\Artifacts\Test2.csv')
-
-    def get_rawdata(self, debug=False):
-        pages_list = []
-        reader = PyPDF2.PdfReader(self.path)
-        for page in reader.pages:
-            page_text = page.extract_text()
-            page_list = page_text.split('\n')
-            pages_list.extend(page_list)
-        self.rawdata = pages_list

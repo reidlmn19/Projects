@@ -1,19 +1,20 @@
 from FinanceReport import Report
-from StringTools import santander_transaction
 from tabulate import tabulate
-from datetime import *
+import matplotlib.pyplot as plt
+import pandas as pd
+import numpy as np
 import os
 
 if __name__ == '__main__':
     r = Report(title="Sample Report - 20230117", bool_debug=False)
     r.register_new_files()
-    print(tabulate(r.df_register.data))
-    # name = r.df_register.data.at[9, 'File']
+    name = r.df_register.data.at[0, 'File']
+    print(tabulate(r.df_register.data, headers=r.df_register.data.columns))
+    print(name)
 
-    # obj = r.extract_data(f'{r.path_rawData}\\{name}', process=False)
-    # os.startfile(obj.path)
-    # obj.get_rawdata()
-    # obj.get_summary()
-    # obj.get_transactions(debug=True)
-    # print(tabulate(obj.transactions, headers=obj.transactions.columns))
+    obj = r.extract_data(f'{r.path_rawData}\\{name}', process=False)
+    obj.get_rawdata()
+    obj.get_summary(debug=True)
+    print(obj.summary)
+    os.startfile(obj.path)
 

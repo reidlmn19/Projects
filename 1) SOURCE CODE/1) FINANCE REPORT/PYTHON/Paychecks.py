@@ -1,5 +1,6 @@
 from StringTools import str_to_date, str_to_number
 
+
 class Paycheck:
     def __init__(self, path=None, employer=None, process=True):
         self.path = path
