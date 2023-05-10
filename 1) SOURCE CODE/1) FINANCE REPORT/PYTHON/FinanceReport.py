@@ -117,6 +117,17 @@ class Report:
             if debug:
                 df_file_summary.to_csv(f'{self.path_artifacts}\\FileSummary.csv')
 
+    def test_summaries(self):
+        for ind, row in self.df_register.data.iterrows():
+            name = row['File']
+            obj = self.extract_data(f'{self.path_rawData}\\{name}', process=False)
+            try:
+                obj.get_rawdata()
+                obj.get_summary()
+                print(name, obj.summary)
+            except:
+                print(name, 'Failed')
+
     def save_dataregistry(self, name=None):
         if name is None:
             self.df_register.data.to_csv(self.path_dataReg)
