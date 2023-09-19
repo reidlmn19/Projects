@@ -6,10 +6,39 @@ import PyPDF2
 from StringTools import str_to_date, str_to_number
 
 
+def santander_transaction(s, account=None, years=None):
+    df = pd.DataFrame()
+    if 'Account Activity (Cont. for Acct#' in s:
+        s = s.split('Page')[0]
+    lst = s.split()
+    if len(lst) > 3:
+        try:
+            df.at[0, 'Date'] = str_to_date(lst[0])[0]
+            df.at[0, 'Description'] = ' '.join(lst[1:-2])
+            df.at[0, 'Amount'] = str_to_number(lst[-2])
+            df.at[0, 'Balance'] = str_to_number(lst[-1])
+
+            if account is not None:
+                df.at[0, 'Account'] = account
+
+            if years is not None:
+                if df.at[0, 'Date'].month == 1:
+                    df.at[0, 'Date'] = df.at[0, 'Date'].replace(year=years[1])
+                else:
+                    df.at[0, 'Date'] = df.at[0, 'Date'].replace(year=years[0])
+        except:
+            return None
+        if df.isnull().values.any():
+            return None
+        else:
+            return df
+
+
 class LoanStatement:
-    def __init__(self, path=None, lender=None, process=True):
+    def __init__(self, path=None, institution=None, process=True):
         self.path = path
-        self.lender = lender
+        self.institution = institution
+        self.result = 'Incomplete'
 
         self.rawdata = None
         self.summary = {}
@@ -17,19 +46,32 @@ class LoanStatement:
             self.process()
 
     def process(self):
-        self.get_rawdata()
-        self.get_summary()
+        try:
+            self.get_rawdata()
+            self.get_summary()
+            self.result = 'Success'
+        except Exception as e:
+            print(f'File Extraction Failed: {self.path} {e}')
+            self.result = 'Failed'
 
     def get_rawdata(self):
-        print(f'Get raw data not defined for {self.lender}')
+        pages_text = ''
+        reader = PyPDF2.PdfReader(self.path)
+        for page in reader.pages:
+            page_text = page.extract_text()
+            pages_text = pages_text + page_text
+        self.rawdata = pages_text
 
     def get_summary(self):
-        print(f'Get summary not defined for {self.lender}')
+        self.summary = {'Starting Balance': None,
+                        'Ending Balance': None,
+                        'Starting Date': None,
+                        'Ending Date': None}
 
 
 class NelnetStatement(LoanStatement):
-    def __init__(self, path=None, lender=None, process=True):
-        super().__init__(path=path, lender=lender, process=process)
+    def __init__(self, path=None, institution='Nelnet', process=True):
+        super().__init__(path=path, institution=institution, process=process)
 
     def get_rawdata(self, debug=False):
         pages_text = ''
@@ -170,3 +212,30 @@ class NelnetStatement(LoanStatement):
                         state = keywords[key]
         self.fix_amount_signs()
         self.transactions['Institution'] = self.institution
+
+    def fix_amount_signs(self):
+        check_balance = pd.DataFrame({'Date': self.summary['Starting Date'],
+                                      'Description': 'Ignore',
+                                      'Amount': 0,
+                                      'Balance': self.summary['Starting Balance Checking'],
+                                      'Account': 'Checking'}, index=[0])
+        save_balance = pd.DataFrame({'Date': self.summary['Starting Date'],
+                                     'Description': 'Ignore',
+                                     'Amount': 0,
+                                     'Balance': self.summary['Starting Balance Savings'],
+                                     'Account': 'Savings'}, index=[0])
+        self.transactions = pd.concat([check_balance, save_balance, self.transactions]).reset_index(drop=True)
+
+        df1 = self.transactions.set_index('Date')
+        df1 = df1[df1['Account'] == 'Checking']
+        df1['Sign1'] = df1['Balance'].diff() < 0
+        df1['Amount'] = np.where(df1['Sign1'], -df1['Amount'], df1['Amount'])
+
+        df2 = self.transactions.set_index('Date')
+        df2 = df2[df2['Account'] == 'Savings']
+        df2['Sign2'] = df2['Balance'].diff() < 0
+        df2['Amount'] = np.where(df2['Sign2'], -df2['Amount'], df2['Amount'])
+
+        self.transactions = pd.concat([df1, df2]).drop(columns=['Sign1', 'Sign2'])
+        self.transactions = self.transactions.drop(self.transactions[self.transactions['Amount'] == 0].index)
+        self.transactions.reset_index(inplace=True)

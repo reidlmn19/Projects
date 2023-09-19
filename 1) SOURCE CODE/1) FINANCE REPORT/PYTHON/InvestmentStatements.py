@@ -4,9 +4,10 @@ from StringTools import str_to_date, str_to_number
 
 
 class InvestmentStatement:
-    def __init__(self, path=None, broker=None, process=True):
+    def __init__(self, path=None, institution=None, process=True):
         self.path = path
-        self.broker = broker
+        self.institution = institution
+        self.result = 'incomplete'
 
         self.rawdata = None
         self.summary = {}
@@ -14,24 +15,37 @@ class InvestmentStatement:
             self.process()
 
     def process(self):
-        self.get_rawdata()
-        self.get_summary()
+        try:
+            self.get_rawdata()
+            self.get_summary()
+            self.result = 'Success'
+        except Exception as e:
+            print(f'File Extraction Failed: {self.path} {e}')
+            self.result = 'Failed'
 
     def get_rawdata(self):
-        print(f'Get raw data not defined for {self.broker}')
+        pages_text = ''
+        reader = PyPDF2.PdfReader(self.path)
+        for page in reader.pages:
+            page_text = page.extract_text()
+            pages_text = pages_text + page_text
+        self.rawdata = pages_text
 
     def get_summary(self):
-        print(f'Get summary not defined for {self.broker}')
+        self.summary = {'Starting Balance': None,
+                        'Ending Balance': None,
+                        'Starting Date': None,
+                        'Ending Date': None}
 
 
 class FidelityStatement(InvestmentStatement):
-    def __init__(self, path=None, broker='Fidelity', process=True):
-        super().__init__(path=path, broker=broker, process=process)
+    def __init__(self, path=None, institution='Fidelity', process=True):
+        super().__init__(path=path, institution=institution, process=process)
 
 
 class BettermentStatement(InvestmentStatement):
-    def __init__(self, path=None, broker='Betterment', process=True):
-        super().__init__(path=path, broker=broker, process=process)
+    def __init__(self, path=None, institution='Betterment', process=True):
+        super().__init__(path=path, institution=institution, process=process)
 
     def get_rawdata(self, debug=False):
         pages_text = ''
@@ -124,5 +138,5 @@ class BettermentStatement(InvestmentStatement):
                 state = keywords[item]
                 counter = 0
 
-        summary['Broker'] = self.broker
+        summary['Broker'] = self.institution
         self.summary = summary

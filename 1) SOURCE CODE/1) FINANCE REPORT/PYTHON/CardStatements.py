@@ -78,21 +78,33 @@ def santander_transaction(s, account=None, years=None):
 
 
 class CardStatement:
-    def __init__(self, path=None, account=None, institution=None, process=True):
+    def __init__(self, path=None, account=None, institution=None, process=True, safe_mode=True):
         self.path = path
         self.account = account
         self.institution = institution
+        self.result = 'Incomplete'
 
         self.rawdata = None
         self.summary = {}
         self.transactions = pd.DataFrame()
         if process:
-            self.process()
+            self.process(safe_mode=safe_mode)
 
-    def process(self):
-        self.get_rawdata()
-        self.get_summary()
-        self.get_transactions()
+    def process(self, safe_mode=True):
+        if safe_mode:
+            try:
+                self.get_rawdata()
+                self.get_summary()
+                self.get_transactions()
+                self.result = 'Success'
+            except Exception as e:
+                print(f'File Extraction Failed: {self.path} {e}')
+                self.result = 'Failed'
+        else:
+            self.get_rawdata()
+            self.get_summary()
+            self.get_transactions()
+            self.result = 'Success'
 
     def get_rawdata(self):
         pages_text = ''
@@ -109,12 +121,12 @@ class CardStatement:
                         'Ending Date': None}
 
     def get_transactions(self):
-        print(f'Get transactions not defined for {self.institution}')
+        self.transactions = None
 
 
 class SantanderStatement(CardStatement):
-    def __init__(self, path=None, account='Checking/Savings', institution='Santander', process=True):
-        super().__init__(path=path, account=account, institution=institution, process=process)
+    def __init__(self, path=None, account='Checking/Savings', institution='Santander', process=True, safe_mode=True):
+        super().__init__(path=path, account=account, institution=institution, process=process, safe_mode=safe_mode)
 
     def get_summary(self, debug=False):
         lst = self.rawdata.split('\n')
@@ -129,8 +141,17 @@ class SantanderStatement(CardStatement):
         keywords = {
             'STUDENT VALUE CHECKING Statement Period': 1,
             'Balances': 2,
-            'SANTANDER SAVINGS Statement Period': 3
+            'SANTANDER SAVINGS Statement Period': 3,
         }
+
+        if 'Statement Period ' in lst[0]:
+            splt = lst[0].replace('Statement Period ', '').split(' TO ')
+            d1 = str_to_date(splt[0])
+            d2 = str_to_date(splt[-1])
+            if d1 is not None:
+                self.summary['Starting Date'] = d1[0]
+            if d2 is not None:
+                self.summary['Ending Date'] = d2[0]
 
         for item in lst:
             item = item.strip()
@@ -280,18 +301,35 @@ class PeoplesStatement(CardStatement):
     def __init__(self, path=None, account='Checking', institution='Peoples', process=True):
         super().__init__(path=path, account=account, institution=institution, process=process)
 
+    def get_rawdata(self):
+        self.rawdata = None
+
 
 class CapitalOneStatement(CardStatement):
     def __init__(self, path=None, account=None, institution='CapitalOne', process=True):
         super().__init__(path=path, account=account, institution=institution, process=process)
 
-    def process(self):
-        self.get_rawdata()
-        self.get_summary()
-        if self.summary['Starting Date'] >= datetime(year=2022, month=1, day=1):
-            self.get_transactions()
+    def process(self, safe_mode=True):
+        if safe_mode:
+            try:
+                self.get_rawdata()
+                self.get_summary()
+                if self.summary['Starting Date'] >= datetime(year=2022, month=1, day=1):
+                    self.get_transactions()
+                else:
+                    self.get_transactions_old()
+                self.result = 'Success'
+            except:
+                print(f'File Extraction Failed: {self.path}')
+                self.result = 'Failed'
         else:
-            self.get_transactions_old(debug=True)
+            self.get_rawdata()
+            self.get_summary()
+            if self.summary['Starting Date'] >= datetime(year=2022, month=1, day=1):
+                self.get_transactions()
+            else:
+                self.get_transactions_old()
+            self.result = 'Success'
 
     def get_summary(self, debug=False):
         lst = self.rawdata.split('\n')

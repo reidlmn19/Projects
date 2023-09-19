@@ -4,12 +4,38 @@ import os
 import win32api
 import datetime
 
-from CardStatements import CapitalOneStatement, SantanderStatement, PeoplesStatement
-from InvestmentStatements import FidelityStatement, BettermentStatement
-from LoanStatements import NelnetStatement
-from Paychecks import IRobotPaycheck, ClearMotionPaycheck
+from CardStatements import CapitalOneStatement, SantanderStatement, PeoplesStatement, CardStatement
+from InvestmentStatements import FidelityStatement, BettermentStatement, InvestmentStatement
+from LoanStatements import NelnetStatement, LoanStatement
+from Paychecks import IRobotPaycheck, ClearMotionPaycheck, Paycheck
 
 right_now = datetime.date.today()
+
+
+def get_data_from_file(path, process=True):
+    obj = None
+    if os.path.exists(path):
+        if 'betterment' in path.lower():
+            obj = BettermentStatement(path, process=process)
+        elif 'santander' in path.lower():
+            obj = SantanderStatement(path, process=process)
+        elif 'peoples' in path.lower():
+            obj = PeoplesStatement(path, process=process)
+        elif 'quicksilver' in path.lower():
+            obj = CapitalOneStatement(path, account='Quicksilver', process=process)
+        elif 'platinum' in path.lower():
+            obj = CapitalOneStatement(path, account='Platinum', process=process)
+        elif 'nelnet' in path.lower():
+            obj = NelnetStatement(path, process=process)
+        elif 'irobot' in path.lower():
+            obj = IRobotPaycheck(path, process=process)
+        elif 'fidelity' in path.lower():
+            obj = FidelityStatement(path, process=process)
+        elif 'clearmotion' in path.lower():
+            obj = ClearMotionPaycheck(path, process=process)
+    else:
+        print(f'Path invalid: {path}')
+    return obj
 
 
 def finddirectory(keyword='FINANCE'):
@@ -22,7 +48,7 @@ def finddirectory(keyword='FINANCE'):
     return None
 
 
-class Report:
+class FinanceManager:
     def __init__(self, title=None, path=None, bool_debug=False):
         if path is None:
             self.path = finddirectory()
@@ -48,108 +74,87 @@ class Report:
             print('Working drive not found')
             return
 
-        self.df_trans = TransactionHistory(path=self.path_tranHistory, bool_debug=bool_debug)
-        self.df_register = DataRegistry(path=self.path_dataReg, bool_debug=bool_debug)
-        self.df_ledger = AccountLedger(path=self.path_accLedger)
+        self.transaction_table = TransactionTable(path=self.path_tranHistory, directory=self.path_artifacts,
+                                                  bool_debug=bool_debug)
+        self.file_register = FileRegister(path=self.path_dataReg, directory=self.path_artifacts, bool_debug=bool_debug)
+        self.account_ledger = AccountLedger(path=self.path_accLedger, directory=self.path_artifacts)
 
         if bool_debug:
             print(f"Title: {self.title}")
             print(f"Path: {self.path}")
-            print(f"Transaction data: {len(self.df_trans.data.index)} records found")
-            print(f"Data Registry: {len(self.df_register.data.index)} files found")
+            print(f"Transaction data: {len(self.transaction_table.data.index)} records found")
+            print(f"Data Registry: {len(self.file_register.data.index)} files found")
 
-    def extract_data(self, path, process=True):
-        obj = None
-        if os.path.exists(path):
-            if 'betterment' in path.lower():
-                obj = BettermentStatement(path, process=process)
-            elif 'santander' in path.lower():
-                obj = SantanderStatement(path, process=process)
-            elif 'peoples' in path.lower():
-                obj = PeoplesStatement(path, process=process)
-            elif 'quicksilver' in path.lower():
-                obj = CapitalOneStatement(path, account='Quicksilver', process=process)
-            elif 'platinum' in path.lower():
-                obj = CapitalOneStatement(path, account='Platinum', process=process)
-            elif 'nelnet' in path.lower():
-                obj = NelnetStatement(path, process=process)
-            elif 'irobot' in path.lower():
-                obj = IRobotPaycheck(path, process=process)
-            elif 'fidelity' in path.lower():
-                obj = FidelityStatement(path, process=process)
-            elif 'clearmotion' in path.lower():
-                obj = ClearMotionPaycheck(path, process=process)
-        else:
-            print(f'Path invalid: {path}')
-        return obj
-
-    def register_new_files(self, save=True):
+    def register_new_files(self, save=True, reset=False):
         discovered_files = os.listdir(self.path_rawData)
-        registered_files = self.df_register.data['File'].values
-        for new_file in discovered_files:
-            if new_file in registered_files:
-                continue
-            else:
-                newline = pd.DataFrame({'File': [new_file], 'Status': ['New']})
-                self.df_register.add_data(newline)
+        registered_files = self.file_register.data['File'].values
+        if reset:
+            df = pd.DataFrame({'File': discovered_files})
+            df['Status'] = 'New'
+            self.file_register.data = df
+        else:
+            for new_file in discovered_files:
+                if new_file in registered_files:
+                    continue
+                else:
+                    newline = pd.DataFrame({'File': [new_file], 'Status': ['New']})
+                    self.file_register.add_data(newline)
         if save:
-            self.save_dataregistry()
+            self.file_register.save()
 
-    def process_new_files(self, save=True, debug=False):
-        df_file_summary = pd.DataFrame()
-        file_queue = self.df_register.data[self.df_register.data['Status'] == 'New']
+    def process_new_files(self, save=True, try_all=False):
+        if try_all:
+            file_queue = self.file_register.data
+        else:
+            file_queue = self.file_register.data[self.file_register.data['Status'] == 'New']
+
         for ind, row in file_queue.iterrows():
-            f = self.path_rawData + row['File']
-            print(f)
-            dat, dic = self.extract_data(f)
-            try:
-                self.df_trans.add_data(dat)
-                self.df_ledger.add_data(dic)
-                self.df_register.data.at[ind, 'Status'] = 'Done'
-            except:
-                self.df_register.data.at[ind, 'Status'] = 'Fail'
-            if debug:
-                df_file_summary = pd.concat([df_file_summary, pd.DataFrame(dic, index=[row['File']])])
+            obj = self.extract_data(self.path_rawData + row['File'])
+
+            if obj is not None:
+                self.file_register.data.at[ind, 'Status'] = obj.result
+                self.file_register.data.at[ind, 'Institution'] = obj.institution
+            else:
+                self.file_register.data.at[ind, 'Status'] = 'Failed'
+                continue
+
+            if obj.result == 'Success':
+                if isinstance(obj, CardStatement):
+                    if obj.transactions is not None:
+                        self.transaction_table.add_data(obj.transactions)
+                        self.file_register.data.at[ind, 'Transactions'] = len(obj.transactions)
+                    else:
+                        self.file_register.data.at[ind, 'Transactions'] = 0
+
         if save:
             self.save_transactions()
             self.save_dataregistry()
             self.save_accountledger()
-            if debug:
-                df_file_summary.to_csv(f'{self.path_artifacts}\\FileSummary.csv')
-
-    def test_summaries(self):
-        for ind, row in self.df_register.data.iterrows():
-            name = row['File']
-            obj = self.extract_data(f'{self.path_rawData}\\{name}', process=False)
-            try:
-                obj.get_rawdata()
-                obj.get_summary()
-                print(name, obj.summary)
-            except:
-                print(name, 'Failed')
 
     def save_dataregistry(self, name=None):
         if name is None:
-            self.df_register.data.to_csv(self.path_dataReg)
+            self.file_register.data.to_csv(self.path_dataReg)
         else:
-            self.df_register.data.to_csv(f'{self.path_permData}\\{name}.csv')
+            self.file_register.data.to_csv(f'{self.path_permData}\\{name}.csv')
 
     def save_transactions(self, name=None):
         if name is None:
-            self.df_trans.data.to_csv(self.path_tranHistory)
+            self.transaction_table.data.to_csv(self.path_tranHistory)
         else:
-            self.df_trans.data.to_csv(f'{self.path_permData}\\{name}.csv')
+            self.transaction_table.data.to_csv(f'{self.path_permData}\\{name}.csv')
 
     def save_accountledger(self, name=None):
         if name is None:
-            self.df_ledger.data.to_csv(self.path_accLedger)
+            self.account_ledger.data.to_csv(self.path_accLedger)
         else:
-            self.df_ledger.data.to_csv(f'{self.path_permData}\\{name}.csv')
+            self.account_ledger.data.to_csv(f'{self.path_permData}\\{name}.csv')
 
 
-class TransactionHistory:
-    def __init__(self, path=None, bool_debug=False):
+class TransactionTable:
+    def __init__(self, path=None, directory=None, bool_debug=False):
         cols = ["Date", "Amount", "Account", "Description", "Category"]
+        self.path = path
+        self.directory = directory
         if path is not None:
             if os.path.exists(path):
                 self.data = pd.read_csv(path, index_col=0)
@@ -164,10 +169,20 @@ class TransactionHistory:
         if isinstance(new_data, pd.DataFrame):
             self.data = pd.concat([self.data, new_data], ignore_index=True)
 
+    def save(self, path=None):
+        if path:
+            self.data.to_csv(path)
+        elif self.path:
+            self.data.to_csv(self.path)
+        else:
+            print(f'No path provided for Transaction table')
 
-class DataRegistry:
-    def __init__(self, path=None, bool_debug=False):
+
+class FileRegister:
+    def __init__(self, path=None, directory=None, bool_debug=False):
         cols = ['File', 'Status']
+        self.path = path
+        self.directory = directory
         if path is not None:
             if os.path.exists(path):
                 self.data = pd.read_csv(path, index_col=0)
@@ -176,9 +191,6 @@ class DataRegistry:
         else:
             self.data = pd.DataFrame(columns=cols)
 
-        if bool_debug:
-            print(self.data.groupby(by='Status').count())
-
     def add_data(self, new_data):
         if isinstance(new_data, pd.DataFrame):
             self.data = pd.concat([self.data, new_data], ignore_index=True)
@@ -186,9 +198,22 @@ class DataRegistry:
             new_df = pd.DataFrame(new_data, columns=["File"])
             self.data = pd.concat([self.data, new_df], ignore_index=True)
 
+    def status_display(self):
+        print(self.data.groupby(by='Status').count())
+
+    def save(self, path=None):
+        if path:
+            self.data.to_csv(path)
+        elif self.path:
+            self.data.to_csv(self.path)
+        else:
+            print(f'No path provided for File Register')
+
 
 class AccountLedger:
-    def __init__(self, path=None):
+    def __init__(self, path=None, directory=None):
+        self.path = path
+        self.directory = directory
         if path is not None:
             if os.path.exists(path):
                 self.data = pd.read_csv(path, index_col=0)
@@ -208,6 +233,14 @@ class AccountLedger:
                 self.data = pd.concat([self.data, pd.DataFrame(
                     {'Date': dic['Period Ending'], dic['Account']: dic['New Balance']},
                     index=[0])], ignore_index=True)
+
+    def save(self, path=None):
+        if path:
+            self.data.to_csv(path)
+        elif self.path:
+            self.data.to_csv(self.path)
+        else:
+            print(f'No path provided for File Register')
 
     def plot(self):
         cpy = self.data.set_index('Date')

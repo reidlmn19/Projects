@@ -7,6 +7,7 @@ def str_to_date(s, year=None):
         '%b. %d, %Y',
         '%B %d, %Y',
         '%b %d, %Y',
+        '%m/%d/%Y',
         '%b %d',
         '%m/%d/%y',
         '%m-%d',
