@@ -12,30 +12,31 @@ from Paychecks import IRobotPaycheck, ClearMotionPaycheck, Paycheck
 right_now = datetime.date.today()
 
 
-def get_data_from_file(path, process=True):
-    obj = None
+def extract_file_data(path, process=True):
+    objs = None
     if os.path.exists(path):
         if 'betterment' in path.lower():
-            obj = BettermentStatement(path, process=process)
+            objs = [BettermentStatement(path, process=process)]
         elif 'santander' in path.lower():
-            obj = SantanderStatement(path, process=process)
+            santander = SantanderStatement(path, process=process)
+            objs = [santander.checking, santander.savings]
         elif 'peoples' in path.lower():
-            obj = PeoplesStatement(path, process=process)
+            objs = [PeoplesStatement(path, process=process)]
         elif 'quicksilver' in path.lower():
-            obj = CapitalOneStatement(path, account='Quicksilver', process=process)
+            objs = [CapitalOneStatement(path, account='Quicksilver', process=process)]
         elif 'platinum' in path.lower():
-            obj = CapitalOneStatement(path, account='Platinum', process=process)
+            objs = [CapitalOneStatement(path, account='Platinum', process=process)]
         elif 'nelnet' in path.lower():
-            obj = NelnetStatement(path, process=process)
+            objs = [NelnetStatement(path, process=process)]
         elif 'irobot' in path.lower():
-            obj = IRobotPaycheck(path, process=process)
+            objs = [IRobotPaycheck(path, process=process)]
         elif 'fidelity' in path.lower():
-            obj = FidelityStatement(path, process=process)
+            objs = [FidelityStatement(path, process=process)]
         elif 'clearmotion' in path.lower():
-            obj = ClearMotionPaycheck(path, process=process)
+            objs = [ClearMotionPaycheck(path, process=process)]
     else:
         print(f'Path invalid: {path}')
-    return obj
+    return objs
 
 
 def finddirectory(keyword='FINANCE'):
@@ -48,8 +49,42 @@ def finddirectory(keyword='FINANCE'):
     return None
 
 
+def categorize(s):
+    dic = {'Subscriptions': ['Apple', 'Spotify'],
+           'Groceries': ['Crosby', 'Market', 'Basket', 'Wegmans', 'Hannaford', 'WHOLEFDS', 'stop & shop',
+                         'LENS.COM',
+                         'PETSMART', 'SHOP N` GO'],
+           'Restaurants': ['Resta', 'Kitchen', 'Grill', 'Bambolina', 'Burger', 'Wendy', 'Blue Lobster', 'Deli',
+                           '5Guys',
+                           'PASQUALES', 'CHRISTINAS', 'A1JAPANESEHOUSEROCHESTERNH', 'OPUS', 'Italian', 'Lobsta',
+                           'PIZZA', 'Mcdonald', 'Flatbread', 'Wingstop', 'CK PEARL', 'SETTLER'],
+           'Alcohol': ['Night Shift', 'Playoffs', 'DNCSS TD GARDEN CONCESBOSTONMA', 'LIQUOR', 'BREWING', 'SHY BIRD',
+                       'DEST: SEA'],
+           'Travel': ['Jetblue', 'Uber', 'NEWPORT', 'MATTERHORN', 'u-haul', 'KINGSTONRI', 'Vietnam', 'Cruiseport',
+                      'NH State Pa'],
+           'Ski': ['IKON', 'Killington', 'TICKETSATWORK', 'SMUGGLERS', 'WaitsfieldVT', 'TREMBLA', 'Loon'],
+           'Car': ['ARTISAN WEST GARASOMERVILLEMA', 'EXXONMOBIL', 'SUNOCO', 'Shell', 'cumberland', '7-eleven',
+                   'A.L. PRIME', 'AL PRIME', 'AUTO', 'RMV', 'E-ZPass', 'Gulf', 'CIRCLE K', 'DCR'],
+           'Stores': ['Best Buy', 'Target', 'BestBuy', 'Kohl', 'Dick', 'REI', 'Walmart', 'NORDSTROM', 'Guitar',
+                      'Savers', 'Depot', 'LOGITECH', 'DIGI KEY', 'CRAIGSLIST', 'HOMEGOODS', 'HALLOWEE'],
+           'Amazon': ['Amazon', 'AMZN'],
+           'Gaming': ['STEAMGAMES', 'BLIZZARD', 'Microsoft', 'Nintendo'],
+           'Golf': ['GOLF', 'Owl'],
+           'Gifts': ['URI', 'HYDROFLASK', 'SOUFEEL'],
+           'Charges': ['Adjustment', 'PYMTAuthDate', 'Capital One'],
+           'Living': ['Fully', 'COMCAST', 'Pet', 'Animal'],
+           'Venmo': ['Venmo'],
+           'Income': ['Payroll', 'Acorns', 'IRS treas']
+           }
+    for i in dic:
+        for j in dic[i]:
+            if j.lower() in s.lower():
+                return i
+    return 'Unknown'
+
+
 class FinanceManager:
-    def __init__(self, title=None, path=None, bool_debug=False):
+    def __init__(self, title=None, path=None):
         if path is None:
             self.path = finddirectory()
         else:
@@ -62,188 +97,135 @@ class FinanceManager:
 
         if self.path is not None:
             self.path_rawData = r'\\'.join([self.path, 'RawData\\'])
-
-            self.path_artifacts = r'\\'.join([self.path, 'Artifacts\\'])
+            self.path_artifacts = f'{self.path}Artifacts'
             self.path_report = f'{self.path_artifacts}\\{self.title}'
 
-            self.path_permData = r'\\'.join([self.path, 'PermanentData\\'])
-            self.path_dataReg = f'{self.path_permData}\\DataRegistry.csv'
-            self.path_tranHistory = f'{self.path_permData}\\TransactionHistory.csv'
-            self.path_accLedger = f'{self.path_permData}\\AccountLedger.csv'
         else:
             print('Working drive not found')
             return
 
-        self.transaction_table = TransactionTable(path=self.path_tranHistory, directory=self.path_artifacts,
-                                                  bool_debug=bool_debug)
-        self.file_register = FileRegister(path=self.path_dataReg, directory=self.path_artifacts, bool_debug=bool_debug)
-        self.account_ledger = AccountLedger(path=self.path_accLedger, directory=self.path_artifacts)
+        self.file_manager = FileManager(raw_data_path=self.path_rawData,
+                                        file_register_path=f'{self.path_artifacts}\\FileRegister.csv')
+        self.data_manager = DataManager(transaction_table_path=f'{self.path_artifacts}\\Transactions.csv')
 
-        if bool_debug:
-            print(f"Title: {self.title}")
-            print(f"Path: {self.path}")
-            print(f"Transaction data: {len(self.transaction_table.data.index)} records found")
-            print(f"Data Registry: {len(self.file_register.data.index)} files found")
+    def reset(self, file_manager=True, transaction_table=True, save=False):
+        if file_manager:
+            self.file_manager.register = pd.DataFrame(columns=FileManager.cols)
+            if save:
+                self.file_manager.save()
+        if transaction_table:
+            self.data_manager.transaction_table = pd.DataFrame(columns=DataManager.cols)
+            if save:
+                self.data_manager.save()
 
-    def register_new_files(self, save=True, reset=False):
-        discovered_files = os.listdir(self.path_rawData)
-        registered_files = self.file_register.data['File'].values
-        if reset:
-            df = pd.DataFrame({'File': discovered_files})
-            df['Status'] = 'New'
-            self.file_register.data = df
+    def update_data(self, save=True, limit=None, _print=False):
+        self.file_manager.queue_files()
+        if limit is None:
+            limit = len(self.file_manager.file_queue)
+        for file in self.file_manager.file_queue[0:limit]:
+            if _print:
+                print(file)
+            try:
+                packages = extract_file_data(f'{self.file_manager.raw_data_path}\\{file}')
+                for package in packages:
+                    self.file_manager.register_file(package)
+                    self.data_manager.add_transactions(package)
+                    print(f'Registered succesfully: {file} {package.account} {package.result}')
+            except:
+                self.file_manager.mark_failed(file)
+                if _print:
+                    print(f'Failed to register package: {file}')
+            if save:
+                self.file_manager.save()
+                self.data_manager.save()
+        self.file_manager.file_queue = []
+
+
+class FileManager:
+    cols = []
+
+    def __init__(self, file_register_path, raw_data_path=None):
+        self.raw_data_path = raw_data_path
+        self.file_register_path = file_register_path
+
+        if os.path.exists(self.file_register_path):
+            self.register = pd.read_csv(self.file_register_path, index_col=0)
         else:
-            for new_file in discovered_files:
-                if new_file in registered_files:
+            self.register = pd.DataFrame(columns=FileManager.cols)
+
+        self.raw_data = os.listdir(self.raw_data_path)
+        self.file_queue = []
+
+    def queue_files(self, by_status=None):
+        if by_status is None:
+            by_status = ['New']
+        else:
+            by_status = by_status
+        queue = self.raw_data
+        for file in queue:
+            if file in self.register['File']:
+                file_matches = self.register['File']
+                if self.register[self.register['File']==file & self.register['Status'] != 'Success']['File'].any():
                     continue
                 else:
-                    newline = pd.DataFrame({'File': [new_file], 'Status': ['New']})
-                    self.file_register.add_data(newline)
-        if save:
-            self.file_register.save()
-
-    def process_new_files(self, save=True, try_all=False):
-        if try_all:
-            file_queue = self.file_register.data
-        else:
-            file_queue = self.file_register.data[self.file_register.data['Status'] == 'New']
-
-        for ind, row in file_queue.iterrows():
-            obj = self.extract_data(self.path_rawData + row['File'])
-
-            if obj is not None:
-                self.file_register.data.at[ind, 'Status'] = obj.result
-                self.file_register.data.at[ind, 'Institution'] = obj.institution
+                    queue = [x for x in queue if x != file]
             else:
-                self.file_register.data.at[ind, 'Status'] = 'Failed'
                 continue
+        self.file_queue = queue
 
-            if obj.result == 'Success':
-                if isinstance(obj, CardStatement):
-                    if obj.transactions is not None:
-                        self.transaction_table.add_data(obj.transactions)
-                        self.file_register.data.at[ind, 'Transactions'] = len(obj.transactions)
-                    else:
-                        self.file_register.data.at[ind, 'Transactions'] = 0
+    def mark_failed(self, name):
+        dic = {
+            'File': name,
+            'Status': 'Failed'
+        }
+        self.register = pd.concat([self.register, pd.DataFrame(dic, index=[0])]).drop_duplicates().reset_index()
+        self.save()
 
-        if save:
-            self.save_transactions()
-            self.save_dataregistry()
-            self.save_accountledger()
-
-    def save_dataregistry(self, name=None):
-        if name is None:
-            self.file_register.data.to_csv(self.path_dataReg)
-        else:
-            self.file_register.data.to_csv(f'{self.path_permData}\\{name}.csv')
-
-    def save_transactions(self, name=None):
-        if name is None:
-            self.transaction_table.data.to_csv(self.path_tranHistory)
-        else:
-            self.transaction_table.data.to_csv(f'{self.path_permData}\\{name}.csv')
-
-    def save_accountledger(self, name=None):
-        if name is None:
-            self.account_ledger.data.to_csv(self.path_accLedger)
-        else:
-            self.account_ledger.data.to_csv(f'{self.path_permData}\\{name}.csv')
-
-
-class TransactionTable:
-    def __init__(self, path=None, directory=None, bool_debug=False):
-        cols = ["Date", "Amount", "Account", "Description", "Category"]
-        self.path = path
-        self.directory = directory
-        if path is not None:
-            if os.path.exists(path):
-                self.data = pd.read_csv(path, index_col=0)
-            else:
-                self.data = pd.DataFrame(columns=cols)
-        else:
-            self.data = pd.DataFrame()
-        if bool_debug:
-            print(self.data.groupby(by='Account').count())
-
-    def add_data(self, new_data):
-        if isinstance(new_data, pd.DataFrame):
-            self.data = pd.concat([self.data, new_data], ignore_index=True)
+    def register_file(self, package):
+        name = package.path.split('\\')[-1]
+        dic = {
+            'File': name,
+            'Status': package.result,
+            'Account': package.account,
+            'Institution': package.institution,
+            'Starting Date': package.summary['Starting Date'],
+            'Ending Date': package.summary['Ending Date']
+        }
+        self.register = pd.concat([self.register, pd.DataFrame(dic, index=[0])]).drop_duplicates().reset_index()
+        self.save()
 
     def save(self, path=None):
         if path:
-            self.data.to_csv(path)
-        elif self.path:
-            self.data.to_csv(self.path)
-        else:
-            print(f'No path provided for Transaction table')
-
-
-class FileRegister:
-    def __init__(self, path=None, directory=None, bool_debug=False):
-        cols = ['File', 'Status']
-        self.path = path
-        self.directory = directory
-        if path is not None:
-            if os.path.exists(path):
-                self.data = pd.read_csv(path, index_col=0)
-            else:
-                self.data = pd.DataFrame(columns=cols)
-        else:
-            self.data = pd.DataFrame(columns=cols)
-
-    def add_data(self, new_data):
-        if isinstance(new_data, pd.DataFrame):
-            self.data = pd.concat([self.data, new_data], ignore_index=True)
-        if isinstance(new_data, list):
-            new_df = pd.DataFrame(new_data, columns=["File"])
-            self.data = pd.concat([self.data, new_df], ignore_index=True)
-
-    def status_display(self):
-        print(self.data.groupby(by='Status').count())
-
-    def save(self, path=None):
-        if path:
-            self.data.to_csv(path)
-        elif self.path:
-            self.data.to_csv(self.path)
+            self.register.to_csv(path)
+        elif self.file_register_path:
+            self.register.to_csv(self.file_register_path)
         else:
             print(f'No path provided for File Register')
 
 
-class AccountLedger:
-    def __init__(self, path=None, directory=None):
-        self.path = path
-        self.directory = directory
-        if path is not None:
-            if os.path.exists(path):
-                self.data = pd.read_csv(path, index_col=0)
-            else:
-                self.data = pd.DataFrame()
+class DataManager:
+    cols = ["Date", "Amount", "Account", "Description", "Category"]
+
+    def __init__(self, transaction_table_path):
+        self.transaction_table_path = transaction_table_path
+        if os.path.exists(self.transaction_table_path):
+            self.transaction_table = pd.read_csv(self.transaction_table_path, index_col=0)
         else:
-            self.data = pd.DataFrame()
+            self.transaction_table = pd.DataFrame(columns=DataManager.cols)
 
-    def add_data(self, dic):
-        if 'Previous Balance' in dic.keys():
-            if 'Period Starting' in dic.keys():
-                self.data = pd.concat([self.data, pd.DataFrame(
-                    {'Date': dic['Period Starting'], dic['Account']: dic['Previous Balance']},
-                    index=[0])], ignore_index=True)
-        if 'New Balance' in dic.keys():
-            if 'Period Ending' in dic.keys():
-                self.data = pd.concat([self.data, pd.DataFrame(
-                    {'Date': dic['Period Ending'], dic['Account']: dic['New Balance']},
-                    index=[0])], ignore_index=True)
+    def add_transactions(self, package):
+        balance = package.transactions['Amount'].cumsum() + package.summary['Starting Balance']
+        package.transactions[f'{package.account} balance'] = balance
+        package.transactions['Source'] = package.path
+        package.transactions['Category'] = [categorize(desc) for desc in list(package.transactions['Description'])]
+        self.transaction_table = pd.concat([self.transaction_table, package.transactions]).drop_duplicates(
+            ignore_index=True)
 
-    def save(self, path=None):
-        if path:
-            self.data.to_csv(path)
-        elif self.path:
-            self.data.to_csv(self.path)
-        else:
-            print(f'No path provided for File Register')
+    def save(self, transaction_table=True):
+        if transaction_table:
+            self.transaction_table.to_csv(self.transaction_table_path)
 
-    def plot(self):
-        cpy = self.data.set_index('Date')
-        plt.plot(cpy)
-        plt.legend()
-        plt.show()
+
+class Analyst:
+    def __init__(self):
+        print(f"This is the Analyst")

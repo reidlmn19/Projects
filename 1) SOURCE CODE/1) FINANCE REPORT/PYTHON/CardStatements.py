@@ -126,7 +126,12 @@ class CardStatement:
 
 class SantanderStatement(CardStatement):
     def __init__(self, path=None, account='Checking/Savings', institution='Santander', process=True, safe_mode=True):
+        self.savings = CardStatement(path=path, account='Savings', institution='Santander', process=False,
+                                     safe_mode=safe_mode)
+        self.checking = CardStatement(path=path, account='Checking', institution='Santander', process=False,
+                                      safe_mode=safe_mode)
         super().__init__(path=path, account=account, institution=institution, process=process, safe_mode=safe_mode)
+        self.savings.result = self.checking.result = 'Success'
 
     def get_summary(self, debug=False):
         lst = self.rawdata.split('\n')
@@ -149,9 +154,9 @@ class SantanderStatement(CardStatement):
             d1 = str_to_date(splt[0])
             d2 = str_to_date(splt[-1])
             if d1 is not None:
-                self.summary['Starting Date'] = d1[0]
+                self.checking.summary['Starting Date'] = self.savings.summary['Starting Date'] = d1[0]
             if d2 is not None:
-                self.summary['Ending Date'] = d2[0]
+                self.checking.summary['Ending Date'] = self.savings.summary['Ending Date'] = d2[0]
 
         for item in lst:
             item = item.strip()
@@ -163,28 +168,28 @@ class SantanderStatement(CardStatement):
                 d1 = str_to_date(splt[0])
                 d2 = str_to_date(splt[-1])
                 if d1 is not None:
-                    self.summary['Starting Date'] = d1[0]
+                    self.checking.summary['Starting Date'] = self.savings.summary['Starting Date'] = d1[0]
                 if d2 is not None:
-                    self.summary['Ending Date'] = d2[0]
+                    self.checking.summary['Ending Date'] = self.savings.summary['Ending Date'] = d2[0]
             elif state == 2:
                 if last_state == 1:
                     if 'Beginning Balance ' in item:
                         a1 = str_to_number(item.replace('Beginning Balance ', '').split()[0])
                         if a1 is not None:
-                            self.summary['Starting Balance Checking'] = a1
+                            self.checking.summary['Starting Balance'] = a1
                     if 'Current Balance' in item:
                         a2 = str_to_number(item.split()[-1])
                         if a2 is not None:
-                            self.summary['Ending Balance Checking'] = a2
+                            self.checking.summary['Ending Balance'] = a2
                 elif last_state == 3:
                     if 'Beginning Balance ' in item:
                         a1 = str_to_number(item.replace('Beginning Balance ', '').split()[0])
                         if a1 is not None:
-                            self.summary['Starting Balance Savings'] = a1
+                            self.savings.summary['Starting Balance'] = a1
                     if 'Current Balance' in item:
                         a2 = str_to_number(item.split()[-1])
                         if a2 is not None:
-                            self.summary['Ending Balance Savings'] = a2
+                            self.savings.summary['Ending Balance'] = a2
                 last_state = state
                 state = 0
 
@@ -195,7 +200,7 @@ class SantanderStatement(CardStatement):
                     last_item = item
 
     def get_transactions(self, debug=False):
-        yr_rng = [self.summary['Starting Date'].year, self.summary['Ending Date'].year]
+        yr_rng = [self.checking.summary['Starting Date'].year, self.checking.summary['Ending Date'].year]
         state = 0
         last_state = 0
         account = 'Checking'
@@ -243,6 +248,7 @@ class SantanderStatement(CardStatement):
                     break
                 else:
                     account = 'Savings'
+                    yr_rng = [self.savings.summary['Starting Date'].year, self.savings.summary['Ending Date'].year]
                     text_buffer = ''
             elif state == 4:
                 entry = santander_transaction(item, account=account, years=yr_rng)
@@ -268,18 +274,20 @@ class SantanderStatement(CardStatement):
                         state = keywords[key]
         self.fix_amount_signs()
         self.transactions['Institution'] = self.institution
+        self.checking.transactions = self.transactions[self.transactions['Account'] == self.checking.account]
+        self.savings.transactions = self.transactions[self.transactions['Account'] == self.savings.account]
 
     def fix_amount_signs(self):
-        check_balance = pd.DataFrame({'Date': self.summary['Starting Date'],
+        check_balance = pd.DataFrame({'Date': self.checking.summary['Starting Date'],
                                       'Description': 'Ignore',
                                       'Amount': 0,
-                                      'Balance': self.summary['Starting Balance Checking'],
-                                      'Account': 'Checking'}, index=[0])
-        save_balance = pd.DataFrame({'Date': self.summary['Starting Date'],
+                                      'Balance': self.checking.summary['Starting Balance'],
+                                      'Account': self.checking.account}, index=[0])
+        save_balance = pd.DataFrame({'Date': self.savings.summary['Starting Date'],
                                      'Description': 'Ignore',
                                      'Amount': 0,
-                                     'Balance': self.summary['Starting Balance Savings'],
-                                     'Account': 'Savings'}, index=[0])
+                                     'Balance': self.savings.summary['Starting Balance'],
+                                     'Account': self.savings.account}, index=[0])
         self.transactions = pd.concat([check_balance, save_balance, self.transactions]).reset_index(drop=True)
 
         df1 = self.transactions.set_index('Date')
