@@ -35,8 +35,9 @@ def santander_transaction(s, account=None, years=None):
 
 
 class LoanStatement:
-    def __init__(self, path=None, institution=None, process=True):
+    def __init__(self, path=None, account=None, institution=None, process=True):
         self.path = path
+        self.account = account
         self.institution = institution
         self.result = 'Incomplete'
 
@@ -70,8 +71,8 @@ class LoanStatement:
 
 
 class NelnetStatement(LoanStatement):
-    def __init__(self, path=None, institution='Nelnet', process=True):
-        super().__init__(path=path, institution=institution, process=process)
+    def __init__(self, path=None, account='Student', institution='Nelnet', process=True):
+        super().__init__(path=path, account='Student', institution=institution, process=process)
 
     def get_rawdata(self, debug=False):
         pages_text = ''

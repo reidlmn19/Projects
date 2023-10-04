@@ -4,8 +4,9 @@ from StringTools import str_to_date, str_to_number
 
 
 class InvestmentStatement:
-    def __init__(self, path=None, institution=None, process=True):
+    def __init__(self, path=None, account=None, institution=None, process=True):
         self.path = path
+        self.account = account
         self.institution = institution
         self.result = 'incomplete'
 
@@ -39,13 +40,13 @@ class InvestmentStatement:
 
 
 class FidelityStatement(InvestmentStatement):
-    def __init__(self, path=None, institution='Fidelity', process=True):
-        super().__init__(path=path, institution=institution, process=process)
+    def __init__(self, path=None, account='investment', institution='Fidelity', process=True):
+        super().__init__(path=path, account='investment', institution=institution, process=process)
 
 
 class BettermentStatement(InvestmentStatement):
-    def __init__(self, path=None, institution='Betterment', process=True):
-        super().__init__(path=path, institution=institution, process=process)
+    def __init__(self, path=None, account='investment', institution='Betterment', process=True):
+        super().__init__(path=path, account='investment', institution=institution, process=process)
 
     def get_rawdata(self, debug=False):
         pages_text = ''

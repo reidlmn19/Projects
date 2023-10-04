@@ -10,8 +10,9 @@ def clearmotion_entry(s):
 
 
 class Paycheck:
-    def __init__(self, path=None, institution=None, process=True):
+    def __init__(self, path=None, account=None, institution=None, process=True):
         self.path = path
+        self.account = account
         self.institution = institution
         self.result = 'Incomplete'
 
@@ -54,13 +55,13 @@ class Paycheck:
 
 
 class IRobotPaycheck(Paycheck):
-    def __init__(self, path=None, institution='iRobot', process=True):
-        super().__init__(path=path, institution=institution, process=process)
+    def __init__(self, path=None, account='Wages', institution='iRobot', process=True):
+        super().__init__(path=path, account='Wages', institution=institution, process=process)
 
 
 class ClearMotionPaycheck(Paycheck):
     def __init__(self, path=None, institution='ClearMotion', process=True):
-        super().__init__(path=path, institution=institution, process=process)
+        super().__init__(path=path, account='Wages', institution=institution, process=process)
 
     def get_summary(self, debug=False):
         lst = self.rawdata.split('\n')

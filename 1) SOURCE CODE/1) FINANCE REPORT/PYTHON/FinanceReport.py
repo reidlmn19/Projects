@@ -3,6 +3,7 @@ import pandas as pd
 import os
 import win32api
 import datetime
+from tabulate import tabulate
 
 from CardStatements import CapitalOneStatement, SantanderStatement, PeoplesStatement, CardStatement
 from InvestmentStatements import FidelityStatement, BettermentStatement, InvestmentStatement
@@ -107,6 +108,7 @@ class FinanceManager:
         self.file_manager = FileManager(raw_data_path=self.path_rawData,
                                         file_register_path=f'{self.path_artifacts}\\FileRegister.csv')
         self.data_manager = DataManager(transaction_table_path=f'{self.path_artifacts}\\Transactions.csv')
+        self.analyst = Analyst(self.file_manager, self.data_manager, self.path_report)
 
     def reset(self, file_manager=True, transaction_table=True, save=False):
         if file_manager:
@@ -130,7 +132,8 @@ class FinanceManager:
                 for package in packages:
                     self.file_manager.register_file(package)
                     self.data_manager.add_transactions(package)
-                    print(f'Registered succesfully: {file} {package.account} {package.result}')
+                    if _print:
+                        print(f'Registered succesfully: {file} {package.account} {package.result}')
             except:
                 self.file_manager.mark_failed(file)
                 if _print:
@@ -142,7 +145,7 @@ class FinanceManager:
 
 
 class FileManager:
-    cols = []
+    cols = ['File', 'Status', 'Account', 'Institution', 'Starting Date', 'Ending Date']
 
     def __init__(self, file_register_path, raw_data_path=None):
         self.raw_data_path = raw_data_path
@@ -163,14 +166,15 @@ class FileManager:
             by_status = by_status
         queue = self.raw_data
         for file in queue:
-            if file in self.register['File']:
-                file_matches = self.register['File']
-                if self.register[self.register['File']==file & self.register['Status'] != 'Success']['File'].any():
-                    continue
-                else:
-                    queue = [x for x in queue if x != file]
-            else:
+            file_not_in_list = file not in list(self.register['File'])
+            if file_not_in_list:
                 continue
+            file_matches = pd.DataFrame()
+            for status in by_status:
+                file_matches = pd.concat([file_matches, self.register[
+                    (self.register['File'] == file) & (self.register['Status'] == status)]])
+            if file_matches.empty:
+                queue = [i for i in queue if i != file]
         self.file_queue = queue
 
     def mark_failed(self, name):
@@ -178,7 +182,7 @@ class FileManager:
             'File': name,
             'Status': 'Failed'
         }
-        self.register = pd.concat([self.register, pd.DataFrame(dic, index=[0])]).drop_duplicates().reset_index()
+        self.register = pd.concat([self.register, pd.DataFrame(dic, index=[0])], ignore_index=True).drop_duplicates()
         self.save()
 
     def register_file(self, package):
@@ -191,7 +195,8 @@ class FileManager:
             'Starting Date': package.summary['Starting Date'],
             'Ending Date': package.summary['Ending Date']
         }
-        self.register = pd.concat([self.register, pd.DataFrame(dic, index=[0])]).drop_duplicates().reset_index()
+        self.register = pd.concat([self.register, pd.DataFrame(dic, index=[0])], ignore_index=True)
+        self.register.drop_duplicates(subset=['File', 'Account', 'Institution'], ignore_index=True, inplace=True)
         self.save()
 
     def save(self, path=None):
@@ -215,11 +220,12 @@ class DataManager:
 
     def add_transactions(self, package):
         balance = package.transactions['Amount'].cumsum() + package.summary['Starting Balance']
-        package.transactions[f'{package.account} balance'] = balance
+        package.transactions[f'{package.account}_{package.institution}_balance'] = balance
         package.transactions['Source'] = package.path
         package.transactions['Category'] = [categorize(desc) for desc in list(package.transactions['Description'])]
-        self.transaction_table = pd.concat([self.transaction_table, package.transactions]).drop_duplicates(
-            ignore_index=True)
+        self.transaction_table = pd.concat([self.transaction_table, package.transactions], ignore_index=True)
+        self.transaction_table.drop_duplicates(subset=['Date', 'Amount', 'Account', 'Description', 'Institution', 'Source'],
+                                               ignore_index=True, inplace=True)
 
     def save(self, transaction_table=True):
         if transaction_table:
@@ -227,5 +233,15 @@ class DataManager:
 
 
 class Analyst:
-    def __init__(self):
-        print(f"This is the Analyst")
+    def __init__(self, file_manager, data_manager, path):
+        self._file_manager = file_manager
+        self._data_manager = data_manager
+        self.path = path
+
+    def account_balances(self):
+        cols = [col for col in self._data_manager.transaction_table.columns if 'balance' in col.lower()]
+        x = self._data_manager.transaction_table['Date'].values
+        y = self._data_manager.transaction_table[cols].values
+        plt.plot(x, y)
+        plt.legend(cols)
+        plt.show()

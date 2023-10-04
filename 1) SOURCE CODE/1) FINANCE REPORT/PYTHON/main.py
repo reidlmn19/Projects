@@ -8,6 +8,7 @@ import os
 if __name__ == '__main__':
     sample = 'Santander_Bank-Account_2021-04-24.pdf'
     r = FinanceManager(title="Sample Report - 20230620")
-    r.update_data(limit=1, _print=True)
+    r.analyst.account_balances()
+    # r.update_data(limit=20, _print=True)
     # r.file_manager.file_register = r.file_manager.file_register.reset_index()
     # r.file_manager.save()
