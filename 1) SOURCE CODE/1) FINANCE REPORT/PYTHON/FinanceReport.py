@@ -84,6 +84,18 @@ def categorize(s):
     return 'Unknown'
 
 
+def df_to_brokenbar(df, account, status):
+    tuple_list = []
+    df['Starting Date'] = pd.to_datetime(df['Starting Date'])
+    df['Ending Date'] = pd.to_datetime(df['Ending Date'])
+    df['Length'] = (df['Ending Date'] - df['Starting Date'])
+    status_match = df[df['Status'] == status]
+    account_slice = status_match[status_match['Identifier'] == account]
+    for ind, row in account_slice.iterrows():
+        tuple_list.append((row['Starting Date'], row['Length']))
+    return tuple_list
+
+
 class FinanceManager:
     def __init__(self, title=None, path=None):
         if path is None:
@@ -178,11 +190,15 @@ class FileManager:
         self.file_queue = queue
 
     def mark_failed(self, name):
-        dic = {
-            'File': name,
-            'Status': 'Failed'
-        }
-        self.register = pd.concat([self.register, pd.DataFrame(dic, index=[0])], ignore_index=True).drop_duplicates()
+        print(name)
+        if name in self.register['File']:
+            self.register.loc[self.register['File'] == name, 'Status'] = 'Failed'
+        else:
+            dic = {
+                'File': name,
+                'Status': 'Failed'
+            }
+            self.register = pd.concat([self.register, pd.DataFrame(dic, index=[0])], ignore_index=True).drop_duplicates()
         self.save()
 
     def register_file(self, package):
@@ -224,8 +240,9 @@ class DataManager:
         package.transactions['Source'] = package.path
         package.transactions['Category'] = [categorize(desc) for desc in list(package.transactions['Description'])]
         self.transaction_table = pd.concat([self.transaction_table, package.transactions], ignore_index=True)
-        self.transaction_table.drop_duplicates(subset=['Date', 'Amount', 'Account', 'Description', 'Institution', 'Source'],
-                                               ignore_index=True, inplace=True)
+        self.transaction_table.drop_duplicates(
+            subset=['Date', 'Amount', 'Account', 'Description', 'Institution', 'Source'],
+            ignore_index=True, inplace=True)
 
     def save(self, transaction_table=True):
         if transaction_table:
@@ -246,28 +263,33 @@ class Analyst:
         plt.legend(cols)
         plt.show()
 
-    def data_coverage(self, by_status=None):
+    def data_coverage(self, by_status=None, bar_height=5, bar_pad=2.5, color_dic=None):
         if by_status is None:
             by_status = ['Success']
         else:
             by_status = by_status
 
-        accounts = (self._file_manager.register['Account'].map(str) + '_' +\
-                   self._file_manager.register['Institution'].map(str)).unique()
+        if color_dic is None:
+            color_dic = {'Success': '#13850b',
+                         'Other': '#e6c63c'}
+        else:
+            color_dic = color_dic
+
+        self._file_manager.register['Identifier'] = (self._file_manager.register['Account'].map(str) + '_' +
+                                                     self._file_manager.register['Institution'].map(str))
+        accounts = self._file_manager.register['Identifier'].unique()
 
         fig, ax = plt.subplots()
-        ax.broken_barh([(110, 30), (150, 10)], (10, 9), facecolors='tab:blue')
-        ax.broken_barh([(10, 50), (100, 20), (130, 10)], (20, 9),
-                       facecolors=('tab:orange', 'tab:green', 'tab:red'))
-        ax.set_ylim(5, 35)
-        ax.set_xlim(0, 200)
-        ax.set_xlabel('seconds since start')
-        ax.set_yticks([15, 25])  # Modify y-axis tick labels
-        ax.grid(True)  # Make grid lines visible
-        ax.annotate('race interrupted', (61, 25),
-                    xytext=(0.8, 0.9), textcoords='axes fraction',
-                    arrowprops=dict(facecolor='black', shrink=0.05),
-                    fontsize=16,
-                    horizontalalignment='right', verticalalignment='top')
-
+        y_height = bar_pad
+        ticks = []
+        labels = []
+        for account in accounts:
+            for status in by_status:
+                ax.broken_barh(df_to_brokenbar(self._file_manager.register, account, status),
+                               (y_height, bar_height), facecolors=color_dic[status])
+            ticks.append(y_height + bar_height/2)
+            labels.append(account)
+            y_height = y_height + bar_height + bar_pad
+        ax.grid(True)
+        ax.set_yticks(ticks, labels=labels)
         plt.show()
