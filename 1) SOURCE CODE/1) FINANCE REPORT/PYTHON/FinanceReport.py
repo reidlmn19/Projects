@@ -1,5 +1,6 @@
 import matplotlib.pyplot as plt
 import pandas as pd
+import numpy as np
 import os
 import win32api
 import datetime
@@ -86,18 +87,21 @@ def categorize(s):
 
 def df_to_brokenbar(df, account, status):
     tuple_list = []
-    df['Starting Date'] = pd.to_datetime(df['Starting Date'])
-    df['Ending Date'] = pd.to_datetime(df['Ending Date'])
-    df['Length'] = (df['Ending Date'] - df['Starting Date'])
-    status_match = df[df['Status'] == status]
-    account_slice = status_match[status_match['Identifier'] == account]
-    for ind, row in account_slice.iterrows():
-        tuple_list.append((row['Starting Date'], row['Length']))
+    try:
+        df['Starting Date'] = pd.to_datetime(df['Starting Date'])
+        df['Ending Date'] = pd.to_datetime(df['Ending Date'])
+        df['Length'] = (df['Ending Date'] - df['Starting Date'])
+        status_match = df[df['Status'] == status]
+        account_slice = status_match[status_match['Identifier'] == account]
+        for ind, row in account_slice.iterrows():
+            tuple_list.append((row['Starting Date'], row['Length']))
+    except:
+        print(f'Failed {account} - {status}')
     return tuple_list
 
 
 class FinanceManager:
-    def __init__(self, title=None, path=None):
+    def __init__(self, title=None, path=None, path_rawdata=None):
         if path is None:
             self.path = finddirectory()
         else:
@@ -109,7 +113,10 @@ class FinanceManager:
             self.title = title
 
         if self.path is not None:
-            self.path_rawData = r'\\'.join([self.path, 'RawData\\'])
+            if path_rawdata is None:
+                self.path_rawData = r'\\'.join([self.path, 'RawData\\'])
+            else:
+                self.path_rawData = path_rawdata
             self.path_artifacts = f'{self.path}Artifacts'
             self.path_report = f'{self.path_artifacts}\\{self.title}'
 
@@ -139,17 +146,17 @@ class FinanceManager:
         for file in self.file_manager.file_queue[0:limit]:
             if _print:
                 print(file)
-            try:
-                packages = extract_file_data(f'{self.file_manager.raw_data_path}\\{file}')
-                for package in packages:
-                    self.file_manager.register_file(package)
+            packages = extract_file_data(f'{self.file_manager.raw_data_path}\\{file}')
+            for package in packages:
+                try:
                     self.data_manager.add_transactions(package)
+                    self.file_manager.register_file(package)
                     if _print:
                         print(f'Registered succesfully: {file} {package.account} {package.result}')
-            except:
-                self.file_manager.mark_failed(file)
-                if _print:
-                    print(f'Failed to register package: {file}')
+                except:
+                    self.file_manager.mark_failed(package)
+                    if _print:
+                        print(f'Failed to register package: {file}')
             if save:
                 self.file_manager.save()
                 self.data_manager.save()
@@ -189,16 +196,19 @@ class FileManager:
                 queue = [i for i in queue if i != file]
         self.file_queue = queue
 
-    def mark_failed(self, name):
-        print(name)
+    def mark_failed(self, package):
+        name = package.path.split('\\')[-1]
+        dic = {
+            'File': name,
+            'Status': package.result,
+            'Account': package.account,
+            'Institution': package.institution,
+        }
         if name in self.register['File']:
-            self.register.loc[self.register['File'] == name, 'Status'] = 'Failed'
+            self.register.loc[self.register['File'] == name] = dic
         else:
-            dic = {
-                'File': name,
-                'Status': 'Failed'
-            }
-            self.register = pd.concat([self.register, pd.DataFrame(dic, index=[0])], ignore_index=True).drop_duplicates()
+            self.register = pd.concat([self.register, pd.DataFrame(dic, index=[0])],
+                                      ignore_index=True).drop_duplicates()
         self.save()
 
     def register_file(self, package):
@@ -254,6 +264,7 @@ class Analyst:
         self._file_manager = file_manager
         self._data_manager = data_manager
         self.path = path
+        self.accounts = self.get_accounts()
 
     def account_balances(self):
         cols = [col for col in self._data_manager.transaction_table.columns if 'balance' in col.lower()]
@@ -263,7 +274,15 @@ class Analyst:
         plt.legend(cols)
         plt.show()
 
-    def data_coverage(self, by_status=None, bar_height=5, bar_pad=2.5, color_dic=None):
+    def get_accounts(self):
+        self._file_manager.register['Identifier'] = (self._file_manager.register['Account'].map(str) + '_' +
+                                                     self._file_manager.register['Institution'].map(str))
+        accounts = self._file_manager.register['Identifier'].unique()
+        ind_nan = np.argwhere(accounts == 'nan_nan')
+        accounts = np.delete(accounts, ind_nan)
+        return accounts
+
+    def data_coverage(self, by_status=None, bar_height=5, bar_pad=2.5, color_dic=None, today=True):
         if by_status is None:
             by_status = ['Success']
         else:
@@ -275,21 +294,56 @@ class Analyst:
         else:
             color_dic = color_dic
 
-        self._file_manager.register['Identifier'] = (self._file_manager.register['Account'].map(str) + '_' +
-                                                     self._file_manager.register['Institution'].map(str))
-        accounts = self._file_manager.register['Identifier'].unique()
-
         fig, ax = plt.subplots()
         y_height = bar_pad
         ticks = []
         labels = []
-        for account in accounts:
+        for account in self.accounts:
             for status in by_status:
                 ax.broken_barh(df_to_brokenbar(self._file_manager.register, account, status),
                                (y_height, bar_height), facecolors=color_dic[status])
-            ticks.append(y_height + bar_height/2)
+            ticks.append(y_height + bar_height / 2)
             labels.append(account)
             y_height = y_height + bar_height + bar_pad
+        if today:
+            plt.axvline(right_now, color='y', linestyle='--', label='Today')
         ax.grid(True)
         ax.set_yticks(ticks, labels=labels)
+        plt.show()
+
+    def file_results(self, colors=None):
+        if colors is None:
+            colors = {
+                'Success': '#13850b',
+                'Failed': '#fa3442',
+                'No Date': '#3459fa',
+                'No Transactions': '#FFFF00'
+            }
+        else:
+            colors = colors
+
+        results = pd.DataFrame()
+        statuses = self._file_manager.register['Status'].unique()
+        for account in self.accounts:
+            by_account = self._file_manager.register[self._file_manager.register['Identifier'] == account]
+            total = len(by_account)
+            dic = {}
+            for status in statuses:
+                by_status = by_account[by_account['Status'] == status]
+                count = len(by_status)
+                percent = count / total
+                dic[status] = percent
+            new_entry = pd.DataFrame(dic, index=[account])
+            results = pd.concat([results, new_entry])
+
+        results.sort_values('Success', inplace=True)
+        lefts = np.zeros(len(results.index))
+        for result in results:
+            if result in colors:
+                plt.barh(results.index, results[result], label=result, color=colors[result], left=lefts)
+            else:
+                plt.barh(results.index, results[result], label=result, left=lefts)
+            lefts += results[result].values
+        plt.legend(loc='lower center')
+        plt.title('Results by account')
         plt.show()

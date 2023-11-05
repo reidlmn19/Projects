@@ -12,6 +12,7 @@ class InvestmentStatement:
 
         self.rawdata = None
         self.summary = {}
+        self.transactions = pd.DataFrame()
         if process:
             self.process()
 
@@ -19,7 +20,7 @@ class InvestmentStatement:
         try:
             self.get_rawdata()
             self.get_summary()
-            self.result = 'Success'
+            self.result = self.health_check()
         except Exception as e:
             print(f'File Extraction Failed: {self.path} {e}')
             self.result = 'Failed'
@@ -38,15 +39,27 @@ class InvestmentStatement:
                         'Starting Date': None,
                         'Ending Date': None}
 
+    def get_transactions(self):
+        self.transactions = pd.DataFrame()
+
+    def health_check(self):
+        if self.summary['Starting Date'] is None:
+            return 'No Date'
+        if self.summary['Ending Date'] is None:
+            return 'No Date'
+        if self.transactions.empty:
+            return 'No Transactions'
+        return 'Success'
+
 
 class FidelityStatement(InvestmentStatement):
     def __init__(self, path=None, account='investment', institution='Fidelity', process=True):
-        super().__init__(path=path, account='investment', institution=institution, process=process)
+        super().__init__(path=path, account='Investment', institution=institution, process=process)
 
 
 class BettermentStatement(InvestmentStatement):
     def __init__(self, path=None, account='investment', institution='Betterment', process=True):
-        super().__init__(path=path, account='investment', institution=institution, process=process)
+        super().__init__(path=path, account='Investment', institution=institution, process=process)
 
     def get_rawdata(self, debug=False):
         pages_text = ''

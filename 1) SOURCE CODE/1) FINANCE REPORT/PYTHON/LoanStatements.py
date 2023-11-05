@@ -43,6 +43,7 @@ class LoanStatement:
 
         self.rawdata = None
         self.summary = {}
+        self.transactions = pd.DataFrame()
         if process:
             self.process()
 
@@ -50,7 +51,7 @@ class LoanStatement:
         try:
             self.get_rawdata()
             self.get_summary()
-            self.result = 'Success'
+            self.result = self.health_check()
         except Exception as e:
             print(f'File Extraction Failed: {self.path} {e}')
             self.result = 'Failed'
@@ -68,6 +69,18 @@ class LoanStatement:
                         'Ending Balance': None,
                         'Starting Date': None,
                         'Ending Date': None}
+
+    def get_transactions(self):
+        self.transactions = pd.DataFrame()
+
+    def health_check(self):
+        if self.summary['Starting Date'] is None:
+            return 'No Date'
+        if self.summary['Ending Date'] is None:
+            return 'No Date'
+        if self.transactions.empty:
+            return 'No Transactions'
+        return 'Success'
 
 
 class NelnetStatement(LoanStatement):

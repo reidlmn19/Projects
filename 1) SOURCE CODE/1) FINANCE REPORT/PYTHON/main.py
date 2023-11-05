@@ -7,6 +7,11 @@ import os
 
 if __name__ == '__main__':
     sample = 'Santander_Bank-Account_2021-04-24.pdf'
-    r = FinanceManager(title="Sample Report - 20230620")
-    r.update_data(limit=1, _print=True)
-    r.analyst.data_coverage()
+    test_data = r'D:\OCT2023DATA'
+    r = FinanceManager(title="Sample Report - 20230620", path_rawdata=test_data)
+    f = f'{r.path_rawData}\\{r.file_manager.raw_data[0]}'
+    print(f)
+
+    # r.update_data(_print=True)
+    # r.analyst.data_coverage()
+    # r.analyst.file_results()
