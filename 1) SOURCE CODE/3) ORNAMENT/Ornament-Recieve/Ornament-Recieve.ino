@@ -12,8 +12,6 @@ Adafruit_NeoPixel strip(LED_COUNT, LED_PIN, NEO_GRBW + NEO_KHZ800);
 RF24 radio(CE_PIN, CSN_PIN);
 
 const byte address[6] = "00001";
-StaticJsonDocument<1024> doc;
-
 
 void setup() {
   radio.begin();
@@ -28,13 +26,12 @@ void setup() {
 
 void loop() {
   if (radio.available()){
-    char text[200] = {0};
-    radio.read(&text, sizeof(text));
-    Serial.println(text);
-    
-//    DeserializationError error = deserializeJson(doc, text);
-//    int color = doc["color"];
-//    write_color(color);
+    char text[48] = {0};
+    radio.read(text, sizeof(text));
+    DynamicJsonDocument doc(1024);
+    deserializeJson(doc, text);
+    long color = doc["color"];
+    write_color(color);
   }
 }
 

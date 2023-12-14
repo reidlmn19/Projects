@@ -32,19 +32,19 @@ void setup() {
   strip.show();
 }
 
-void loop(){
-  for (int i=0; i<8; i++){
-    radio.write(&colors[i], sizeof(colors[i]));
-    delay(1000);
-  }
-}
-
-//void loop() {
-//  if (color_changed()){
-//    write_color(colors[color_select]);
+//void loop(){
+//  for (int i=0; i<8; i++){
+//    radio.write(&colors[i], sizeof(colors[i]));
+//    delay(1000);
 //  }
-//  delay(200);
 //}
+
+void loop() {
+  if (color_changed()){
+    write_color(colors[color_select]);
+  }
+  delay(200);
+}
 
 bool color_changed(){
   int color_now = 8 * analogRead(POT_PIN)/1024;
@@ -69,7 +69,8 @@ void print_color(){
 void send_color(){
   DynamicJsonDocument doc(1024);
   doc["color"] = colors[color_select];
-  char nrf_buff[1024];
+  char nrf_buff[48];
   serializeJson(doc, nrf_buff);
-  radio.write(&nrf_buff, sizeof(nrf_buff));
+  Serial.println(nrf_buff);
+  radio.write(nrf_buff, sizeof(nrf_buff));
 }
