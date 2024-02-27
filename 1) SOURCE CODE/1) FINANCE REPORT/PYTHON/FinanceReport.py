@@ -3,15 +3,12 @@ import pandas as pd
 import numpy as np
 import os
 import win32api
-import datetime
+from datetime import date
 from tabulate import tabulate
+from Statements import*
+import StringTools
 
-from CardStatements import CapitalOneStatement, SantanderStatement, PeoplesStatement, CardStatement
-from InvestmentStatements import FidelityStatement, BettermentStatement, InvestmentStatement
-from LoanStatements import NelnetStatement, LoanStatement
-from Paychecks import IRobotPaycheck, ClearMotionPaycheck, Paycheck
-
-right_now = datetime.date.today()
+right_now = date.today()
 
 
 def extract_file_data(path, process=True):
@@ -165,6 +162,17 @@ class FinanceManager:
 
 class FileManager:
     cols = ['File', 'Status', 'Account', 'Institution', 'Starting Date', 'Ending Date']
+    file_types = {0: "Peoples Credit Union - Savings",
+                  1: "Peoples Credit Union - Checking",
+                  2: "Santander - Checking",
+                  3: "Santander - Savings",
+                  4: "Capital One - Platinum",
+                  5: "Capital One - QuickSilver",
+                  6: "iRobot - Paycheck",
+                  7: "ClearMotion - Paycheck",
+                  8: "Nelnet",
+                  9: "Betterment",
+                  10: "Fidelity"}
 
     def __init__(self, file_register_path, raw_data_path=None):
         self.raw_data_path = raw_data_path
@@ -232,6 +240,14 @@ class FileManager:
             self.register.to_csv(self.file_register_path)
         else:
             print(f'No path provided for File Register')
+
+    def sort_filenames(self, rename=True):
+        contents = os.listdir(self.raw_data_path)
+        test = f'{self.raw_data_path}\\{contents[0]}'
+        print(StringTools.dic_as_menu(FileManager.file_types))
+        os.startfile(test)
+        s = int(input(f'{contents[0]}'))
+        print(f'File {contents[0]} identified as type {FileManager.file_types[s]}')
 
 
 class DataManager:

@@ -10,6 +10,7 @@ def clearmotion_entry(s):
     #     print('uhhhh')
 
 
+
 class Paycheck:
     def __init__(self, path=None, account=None, institution=None, process=True):
         self.path = path

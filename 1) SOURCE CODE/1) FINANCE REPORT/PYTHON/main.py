@@ -1,10 +1,8 @@
 from FinanceReport import *
-from tabulate import tabulate
-import matplotlib.pyplot as plt
-import pandas as pd
-import numpy as np
+from Statements import UnknownStatement, file_types
 import PyPDF2
-import os
+from datetime import datetime
+from StringTools import find_available_filename, dic_as_menu
 
 
 def get_pdf_author(path, show_all=False):
@@ -25,16 +23,13 @@ def get_pdf_author(path, show_all=False):
     print(pages_text)
 
 
-
 if __name__ == '__main__':
-    sample = 'Santander_Bank-Account_2021-04-24.pdf'
-    test_data = r'E:\OCT2023DATA'
-    r = FinanceManager(title="Sample Report - 20230620", path_rawdata=test_data)
+    print(dic_as_menu(file_types))
+    test_directory = r'D:\OCT2023DATA'
+    test_list = os.listdir(test_directory)
+    for test_file in test_list:
+        us = UnknownStatement(f'{test_directory}\\{test_file}')
+        s = us.determine_statement_type(manual_mode=False)
+        print(test_file, s)
 
-    target = r'E:\OCT2023DATA\Betterment_401k_Quarterly_Statement_2023-09-30.pdf'
-    obj = get_pdf_author(target, show_all=True)
-    print(obj)
-
-    # for file in r.file_manager.raw_data:
-    #     f = f'{r.path_rawData}\\{file}'
-    #     get_file_author(f)
+    # r = FinanceManager(title=f'Sample Report - {datetime.today()}')
