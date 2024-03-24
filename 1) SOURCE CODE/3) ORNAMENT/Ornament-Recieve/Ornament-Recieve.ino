@@ -4,40 +4,44 @@
 #include <RF24.h>
 
 #define LED_PIN     6
-#define LED_COUNT   1
+#define LED_COUNT   55
 #define CE_PIN      9
-#define CSN_PIN     8
+#define CSN_PIN     10
 
 Adafruit_NeoPixel strip(LED_COUNT, LED_PIN, NEO_GRBW + NEO_KHZ800);
 RF24 radio(CE_PIN, CSN_PIN);
 
 const byte address[6] = "00001";
 
-void setup() {
-  radio.begin();
-  radio.openReadingPipe(0, address);
-  radio.startListening();
-  
+void setup() { 
   Serial.begin(9600);
   
   strip.begin();
   strip.show();
+
+  radio.begin();
+  radio.openReadingPipe(0, address);
+  radio.startListening();
 }
 
 void loop() {
   if (radio.available()){
-    char text[48] = {0};
+    char text[48] = "";
     radio.read(text, sizeof(text));
     DynamicJsonDocument doc(1024);
     deserializeJson(doc, text);
-    long color = doc["color"];
-    write_color(color);
+    int r = doc["red"];
+    int g = doc["green"];
+    int b = doc["blue"];
+    Serial.println(text);
+    write_color(r,g,b);
   }
+  
 }
 
-void write_color(int color){
+void write_color(int r, int g, int b){
   for(int i=0; i<strip.numPixels(); i++) {
-    strip.setPixelColor(i, color);
+    strip.setPixelColor(i, r ,g ,b);
     strip.show();
   }
 }
