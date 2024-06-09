@@ -5,34 +5,40 @@ import os
 import win32api
 from datetime import date
 from tabulate import tabulate
-from Statements import*
+from Statements import *
 import StringTools
 
 right_now = date.today()
+
+
+def extract_file_data2(path):
+    us = UnknownStatement(path=path)
+    statements = us.determine_statement_type()
+    return statements
 
 
 def extract_file_data(path, process=True):
     objs = None
     if os.path.exists(path):
         if 'betterment' in path.lower():
-            objs = [BettermentStatement(path, process=process)]
-        elif 'santander' in path.lower():
-            santander = SantanderStatement(path, process=process)
-            objs = [santander.checking, santander.savings]
+            objs = BettermentStatement(path, process=process)
+        # elif 'santander' in path.lower():
+        #     santander = SantanderStatement(path, process=process)
+        #     objs = santander.checking, santander.savings
         elif 'peoples' in path.lower():
-            objs = [PeoplesStatement(path, process=process)]
+            objs = PeoplesStatement(path, process=process)
         elif 'quicksilver' in path.lower():
-            objs = [CapitalOneStatement(path, account='Quicksilver', process=process)]
+            objs = CapitalOneStatement(path, account='Quicksilver', process=process)
         elif 'platinum' in path.lower():
-            objs = [CapitalOneStatement(path, account='Platinum', process=process)]
+            objs = CapitalOneStatement(path, account='Platinum', process=process)
         elif 'nelnet' in path.lower():
-            objs = [NelnetStatement(path, process=process)]
+            objs = NelnetStatement(path, process=process)
         elif 'irobot' in path.lower():
-            objs = [IRobotPaycheck(path, process=process)]
+            objs = IRobotPaycheck(path, process=process)
         elif 'fidelity' in path.lower():
-            objs = [FidelityStatement(path, process=process)]
+            objs = FidelityStatement(path, process=process)
         elif 'clearmotion' in path.lower():
-            objs = [ClearMotionPaycheck(path, process=process)]
+            objs = ClearMotionPaycheck(path, process=process)
     else:
         print(f'Path invalid: {path}')
     return objs
@@ -114,21 +120,21 @@ class FinanceManager:
                 self.path_rawData = r'\\'.join([self.path, 'RawData\\'])
             else:
                 self.path_rawData = path_rawdata
-            self.path_artifacts = f'{self.path}Artifacts'
-            self.path_report = f'{self.path_artifacts}\\{self.title}'
+            self.path_permanentData = f'{self.path}PermanentData'
+            self.path_report = f'{self.path_permanentData}\\{self.title}'
 
         else:
             print('Working drive not found')
             return
 
         self.file_manager = FileManager(raw_data_path=self.path_rawData,
-                                        file_register_path=f'{self.path_artifacts}\\FileRegister.csv')
-        self.data_manager = DataManager(transaction_table_path=f'{self.path_artifacts}\\Transactions.csv')
+                                        file_manager_path=f'{self.path_permanentData}\\file_manager.csv')
+        self.data_manager = DataManager(transaction_table_path=f'{self.path_permanentData}\\data_manager.csv')
         self.analyst = Analyst(self.file_manager, self.data_manager, self.path_report)
 
     def reset(self, file_manager=True, transaction_table=True, save=False):
         if file_manager:
-            self.file_manager.register = pd.DataFrame(columns=FileManager.cols)
+            self.file_manager.file_table = pd.DataFrame(columns=FileManager.cols)
             if save:
                 self.file_manager.save()
         if transaction_table:
@@ -143,21 +149,30 @@ class FinanceManager:
         for file in self.file_manager.file_queue[0:limit]:
             if _print:
                 print(file)
-            packages = extract_file_data(f'{self.file_manager.raw_data_path}\\{file}')
-            for package in packages:
-                try:
-                    self.data_manager.add_transactions(package)
-                    self.file_manager.register_file(package)
-                    if _print:
-                        print(f'Registered succesfully: {file} {package.account} {package.result}')
-                except:
-                    self.file_manager.mark_failed(package)
-                    if _print:
-                        print(f'Failed to register package: {file}')
+            self.add_new_file(f'{self.file_manager.raw_data_path}\\{file}', _print=_print)
             if save:
                 self.file_manager.save()
                 self.data_manager.save()
         self.file_manager.file_queue = []
+
+    def add_new_file(self, path, _print=False):
+        # First you should check if the file is already known
+        us = UnknownStatement(path=path)
+        statement = us.determine_statement_type(debug=True)
+        if isinstance(statement, UnknownStatement):
+            self.file_manager.mark_failed(statement)
+            print(f'Unknown statement: {statement.path}')
+        try:
+            self.data_manager.add_transactions(statement)
+            self.file_manager.add_file(statement)
+            if _print:
+                print(f'Added succesfully: {path} {statement.account} {statement.result}')
+                print(statement.summary)
+                print(tabulate(statement.transactions, headers=statement.transactions.columns))
+        except:
+            self.file_manager.mark_failed(statement)
+            if _print:
+                print(f'Failed to add file: {path}')
 
 
 class FileManager:
@@ -174,14 +189,14 @@ class FileManager:
                   9: "Betterment",
                   10: "Fidelity"}
 
-    def __init__(self, file_register_path, raw_data_path=None):
+    def __init__(self, file_manager_path, raw_data_path=None):
         self.raw_data_path = raw_data_path
-        self.file_register_path = file_register_path
+        self.file_manager_path = file_manager_path
 
-        if os.path.exists(self.file_register_path):
-            self.register = pd.read_csv(self.file_register_path, index_col=0)
+        if os.path.exists(self.file_manager_path):
+            self.file_table = pd.read_csv(self.file_manager_path, index_col=0)
         else:
-            self.register = pd.DataFrame(columns=FileManager.cols)
+            self.file_table = pd.DataFrame(columns=FileManager.cols)
 
         self.raw_data = os.listdir(self.raw_data_path)
         self.file_queue = []
@@ -193,13 +208,13 @@ class FileManager:
             by_status = by_status
         queue = self.raw_data
         for file in queue:
-            file_not_in_list = file not in list(self.register['File'])
+            file_not_in_list = file not in list(self.file_table['File'])
             if file_not_in_list:
                 continue
             file_matches = pd.DataFrame()
             for status in by_status:
-                file_matches = pd.concat([file_matches, self.register[
-                    (self.register['File'] == file) & (self.register['Status'] == status)]])
+                file_matches = pd.concat([file_matches, self.file_table[
+                    (self.file_table['File'] == file) & (self.file_table['Status'] == status)]])
             if file_matches.empty:
                 queue = [i for i in queue if i != file]
         self.file_queue = queue
@@ -209,18 +224,18 @@ class FileManager:
         dic = {
             'File': name,
             'Status': package.result,
-            'Account': package.account,
             'Institution': package.institution,
         }
-        if name in self.register['File']:
-            self.register.loc[self.register['File'] == name] = dic
+        if name in self.file_table['File']:
+            self.file_table.loc[self.file_table['File'] == name] = dic
         else:
-            self.register = pd.concat([self.register, pd.DataFrame(dic, index=[0])],
-                                      ignore_index=True).drop_duplicates()
+            self.file_table = pd.concat([self.file_table, pd.DataFrame(dic, index=[0])],
+                                        ignore_index=True).drop_duplicates()
         self.save()
 
-    def register_file(self, package):
-        name = package.path.split('\\')[-1]
+    def add_file(self, package):
+        # name = package.path.split('\\')[-1]
+        name = package.path
         dic = {
             'File': name,
             'Status': package.result,
@@ -229,17 +244,17 @@ class FileManager:
             'Starting Date': package.summary['Starting Date'],
             'Ending Date': package.summary['Ending Date']
         }
-        self.register = pd.concat([self.register, pd.DataFrame(dic, index=[0])], ignore_index=True)
-        self.register.drop_duplicates(subset=['File', 'Account', 'Institution'], ignore_index=True, inplace=True)
+        self.file_table = pd.concat([self.file_table, pd.DataFrame(dic, index=[0])], ignore_index=True)
+        self.file_table.drop_duplicates(subset=['File', 'Account', 'Institution'], ignore_index=True, inplace=True)
         self.save()
 
     def save(self, path=None):
         if path:
-            self.register.to_csv(path)
-        elif self.file_register_path:
-            self.register.to_csv(self.file_register_path)
+            self.file_table.to_csv(path)
+        elif self.file_manager_path:
+            self.file_table.to_csv(self.file_manager_path)
         else:
-            print(f'No path provided for File Register')
+            print(f'No path provided for File Manager')
 
     def sort_filenames(self, rename=True):
         contents = os.listdir(self.raw_data_path)
@@ -270,9 +285,13 @@ class DataManager:
             subset=['Date', 'Amount', 'Account', 'Description', 'Institution', 'Source'],
             ignore_index=True, inplace=True)
 
-    def save(self, transaction_table=True):
-        if transaction_table:
+    def save(self, path=None):
+        if path:
+            self.transaction_table.to_csv(path)
+        elif self.transaction_table_path:
             self.transaction_table.to_csv(self.transaction_table_path)
+        else:
+            print(f'No path provided for File Manager')
 
 
 class Analyst:
@@ -291,9 +310,9 @@ class Analyst:
         plt.show()
 
     def get_accounts(self):
-        self._file_manager.register['Identifier'] = (self._file_manager.register['Account'].map(str) + '_' +
-                                                     self._file_manager.register['Institution'].map(str))
-        accounts = self._file_manager.register['Identifier'].unique()
+        self._file_manager.file_table['Identifier'] = (self._file_manager.file_table['Account'].map(str) + '_' +
+                                                       self._file_manager.file_table['Institution'].map(str))
+        accounts = self._file_manager.file_table['Identifier'].unique()
         ind_nan = np.argwhere(accounts == 'nan_nan')
         accounts = np.delete(accounts, ind_nan)
         return accounts
@@ -316,7 +335,7 @@ class Analyst:
         labels = []
         for account in self.accounts:
             for status in by_status:
-                ax.broken_barh(df_to_brokenbar(self._file_manager.register, account, status),
+                ax.broken_barh(df_to_brokenbar(self._file_manager.file_table, account, status),
                                (y_height, bar_height), facecolors=color_dic[status])
             ticks.append(y_height + bar_height / 2)
             labels.append(account)
@@ -339,9 +358,9 @@ class Analyst:
             colors = colors
 
         results = pd.DataFrame()
-        statuses = self._file_manager.register['Status'].unique()
+        statuses = self._file_manager.file_table['Status'].unique()
         for account in self.accounts:
-            by_account = self._file_manager.register[self._file_manager.register['Identifier'] == account]
+            by_account = self._file_manager.file_table[self._file_manager.file_table['Identifier'] == account]
             total = len(by_account)
             dic = {}
             for status in statuses:

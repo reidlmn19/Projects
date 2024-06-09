@@ -91,42 +91,41 @@ def santander_transaction(s, account=None, years=None):
             return df
 
 
-def find_keyword_DF(df):
+def get_statement(p, t):
+    if t == 0:
+        return None
+    elif t == 1:
+        return AltenPaycheck(path=p)
+    elif t == 2:
+        return AltenPaycheck(path=p)
+
+
+def find_keyword(obj, debug=False):
     keywords = {
-        '236297275': 10,
-        'Z05806871': 10,
+        1: ['ALTENTECHNOLOGY USAINC', 'ratesalary/hours thisperiod yeartodate', '3221WBIGBEAVER RD-STE116']
     }
-    if 'Account' in df.columns:
-        acc = df['Account'][0]
-        if str(acc) in keywords:
-            return keywords[acc]
-    if 'Plan name:' in df.columns:
-        return 9
+
+    if debug:
+        print(obj)
+
+    if isinstance(obj, pd.DataFrame):
+        for account in keywords:
+            for keyword in keywords[account]:
+                if keyword not in obj:
+                    break
+            return account
+        return 0
+    elif isinstance(obj, str):
+        for account in keywords:
+            for keyword in keywords[account]:
+                if keyword in obj:
+                    print(f'keyword found for account {account}: {keyword}')
+            else:
+                break
+        return 0
 
 
-def find_keyword_metadata(dat):
-    keywords = {
-        'Nelnet': 8,
-        'Automatic Data Processing,Inc.': 6,
-        'Registered to: CAPITAL1': 3
-    }
-    if '/Author' in dat.keys():
-        auth = dat['/Author']
-        if auth in keywords:
-            return keywords[auth]
-
-
-def find_keyword_text(txt):
-    keywords = {
-        'Betterment for Business LLC': 9,
-        'www.santanderbank.com': 2,
-    }
-    for key in keywords:
-        if key in txt:
-            return keywords[key]
-
-
-class CardStatement:
+class AccountStatement:
     def __init__(self, path=None, account=None, institution=None, process=True, safe_mode=True):
         self.path = path
         self.account = account
@@ -189,56 +188,29 @@ class UnknownStatement:
         self.institution = institution
         self.result = 'Not Started'
 
-    def determine_statement_type(self, manual_mode=False):
-        if manual_mode:
-            os.startfile(self.path)
-            statement_type = int(input(self.path))
-        else:
-            path_list = self.path.split('\\')
-            name, ext = path_list[-1].split('.')
-            if ext == 'csv':
-                df = pd.read_csv(self.path)
-                statement_type = find_keyword_DF(df)
-            elif ext == 'pdf':
-                reader = PyPDF2.PdfReader(self.path)
-                data = reader.metadata
-                statement_type = find_keyword_metadata(data)
-                if statement_type is None:
-                    pages_text = ''
-                    reader = PyPDF2.PdfReader(self.path)
-                    for page in reader.pages:
-                        page_text = page.extract_text()
-                        pages_text = pages_text + page_text
-                    statement_type = find_keyword_text(pages_text)
-
-        if statement_type == 0:
-            return PeoplesStatement(self.path)
-        elif statement_type == 1:
-            return PeoplesStatement(self.path)
-        elif statement_type == 2:
-            return SantanderStatement(self.path)
-        elif statement_type == 3:
-            return CapitalOneStatement(self.path)
-        elif statement_type == 4:
-            return IRobotPaycheck(self.path)
-        elif statement_type == 5:
-            return ClearMotionPaycheck(self.path)
-        elif statement_type == 6:
-            return NelnetStatement(self.path)
-        elif statement_type == 7:
-            return BettermentStatement(self.path)
-        elif statement_type == 8:
-            return FidelityStatement(self.path)
-        elif statement_type == 9:
-            return CardStatement(self.path)
+    def determine_statement_type(self, manual_mode=False, debug=True):
+        statement_type = None
+        path_list = self.path.split('\\')
+        name, ext = path_list[-1].split('.')
+        if ext == 'csv':
+            df = pd.read_csv(self.path)
+            statement_type = find_keyword(df, debug=debug)
+        elif ext == 'pdf':
+            pages_text = ''
+            reader = PyPDF2.PdfReader(self.path)
+            for page in reader.pages:
+                page_text = page.extract_text()
+                pages_text = pages_text + page_text
+            statement_type = find_keyword(pages_text, debug=debug)
+        return get_statement(self.path, statement_type)
 
 
-class SantanderStatement(CardStatement):
+class SantanderStatement(AccountStatement):
     def __init__(self, path=None, account='Checking/Savings', institution='Santander', process=True, safe_mode=True):
-        self.savings = CardStatement(path=path, account='Savings', institution='Santander', process=False,
-                                     safe_mode=safe_mode)
-        self.checking = CardStatement(path=path, account='Checking', institution='Santander', process=False,
-                                      safe_mode=safe_mode)
+        self.savings = AccountStatement(path=path, account='Savings', institution='Santander', process=False,
+                                        safe_mode=safe_mode)
+        self.checking = AccountStatement(path=path, account='Checking', institution='Santander', process=False,
+                                         safe_mode=safe_mode)
         super().__init__(path=path, account=account, institution=institution, process=process, safe_mode=safe_mode)
         self.savings.result = self.checking.result = 'Success'
 
@@ -414,7 +386,7 @@ class SantanderStatement(CardStatement):
         self.transactions.reset_index(inplace=True)
 
 
-class PeoplesStatement(CardStatement):
+class PeoplesStatement(AccountStatement):
     def __init__(self, path=None, account='Checking', institution='Peoples', process=True):
         super().__init__(path=path, account=account, institution=institution, process=process)
 
@@ -422,7 +394,7 @@ class PeoplesStatement(CardStatement):
         self.rawdata = None
 
 
-class CapitalOneStatement(CardStatement):
+class CapitalOneStatement(AccountStatement):
     def __init__(self, path=None, account=None, institution='CapitalOne', process=True):
         super().__init__(path=path, account=account, institution=institution, process=process)
 
@@ -1082,9 +1054,8 @@ class NelnetStatement(LoanStatement):
 
 
 class Paycheck:
-    def __init__(self, path=None, account=None, institution=None, process=True):
+    def __init__(self, path=None, institution=None, process=True):
         self.path = path
-        self.account = account
         self.institution = institution
         self.result = 'Incomplete'
 
@@ -1099,7 +1070,7 @@ class Paycheck:
         try:
             self.get_rawdata()
             self.get_summary()
-            self.get_deductions()
+            self.get_transactions()
             self.result = self.health_check()
         except Exception as e:
             print(f'File Extraction Failed: {self.path} {e}')
@@ -1141,12 +1112,12 @@ class Paycheck:
 
 class IRobotPaycheck(Paycheck):
     def __init__(self, path=None, account='Wages', institution='iRobot', process=True):
-        super().__init__(path=path, account='Wages', institution=institution, process=process)
+        super().__init__(path=path, institution=institution, process=process)
 
 
 class ClearMotionPaycheck(Paycheck):
     def __init__(self, path=None, institution='ClearMotion', process=True):
-        super().__init__(path=path, account='Wages', institution=institution, process=process)
+        super().__init__(path=path, institution=institution, process=process)
 
     def get_summary(self, debug=False):
         lst = self.rawdata.split('\n')
@@ -1214,3 +1185,8 @@ class ClearMotionPaycheck(Paycheck):
                 entry = clearmotion_entry(item)
                 if entry is not None:
                     print(entry)
+
+
+class AltenPaycheck(Paycheck):
+    def __init__(self, path=None, institution='Alten', process=True):
+        super().__init__(path=path, institution=institution, process=process)
